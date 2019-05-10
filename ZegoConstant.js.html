@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: ZegoConstant.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: ZegoConstant.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>
+const kLiveRoomErrorBase = 0x01000000;
+const SEG_PUBLISH_FATAL_ERROR = 0x0001 &lt;&lt; 16;   ///&lt; 推流严重错误段
+const SEG_PUBLISH_NORMAL_ERROR = 0x0002 &lt;&lt; 16;  ///&lt; 推流普通错误段
+const SEG_PLAY_FATAL_ERROR = 0x0003 &lt;&lt; 16;      ///&lt; 拉流严重错误段
+const SEG_PLAY_NORMAL_ERROR = 0x0004 &lt;&lt; 16;     ///&lt; 拉流普通错误段
+
+ZEGOCONSTANTS = {
+    ZegoLogLevel:
+    {
+        Grievous: 0,
+        Error: 1,
+        Warning: 2,
+        Generic: 3,    ///&lt; 通常在发布产品中使用
+        Debug: 4       ///&lt; 调试阶段使用
+    },
+    ZegoRoomRole:
+    {
+        Anchor: 1,     /**&lt; 主播 */
+        Audience: 2,   /**&lt; 观众 */
+    },
+    /** 用户更新类型 */
+    ZegoUserUpdateType:
+    {
+        UPDATE_TOTAL: 1,   /**&lt; 全量更新 */
+        UPDATE_INCREASE: 2,/**&lt; 增量更新 */
+    },
+    /** 用户更新属性 */
+    ZegoUserUpdateFlag:
+    {
+        USER_ADDED: 1,     /**&lt; 新增 */
+        USER_DELETED: 2,   /**&lt; 删除 */
+    },
+    /** 消息类型 */
+    ZegoMessageType:
+    {
+        Text: 1,           /**&lt; 文字 */
+        Picture: 2,        /**&lt; 图片 */
+        File: 3,           /**&lt; 文件 */
+        OtherType: 100,    /**&lt; 其他 */
+    },
+    /** 消息优先级 */
+    ZegoMessagePriority:
+    {
+        Default: 2,        /**&lt; 默认优先级 */
+        High: 3,           /**&lt; 高优先级 */
+    },
+    /** 消息类别 */
+    ZegoMessageCategory:
+    {
+        Chat: 1,               /**&lt; 聊天 */
+        System: 2,             /**&lt; 系统 */
+        Like: 3,               /**&lt; 点赞 */
+        Gift: 4,               /**&lt; 送礼物 */
+        OtherCategory: 100,    /**&lt; 其他 */
+    },
+    PublishChannelIndex:
+    {
+        PUBLISH_CHN_MAIN: 0,                       /**&lt; 主推流通道，默认 */
+        PUBLISH_CHN_AUX: 1,                        /**&lt; 第二路推流通道，无法推出声音 */
+    },
+    RemoteViewIndex:
+    {
+        RemoteViewIndex_First: 0,
+        RemoteViewIndex_Second: 1,
+        RemoteViewIndex_Third: 2,
+    },
+    ZegoVideoViewMode:
+    {
+        ZegoVideoViewModeScaleAspectFit: 0,    ///&lt; 等比缩放，可能有黑边
+        ZegoVideoViewModeScaleAspectFill: 1,   ///&lt; 等比缩放填充整View，可能有部分被裁减
+        ZegoVideoViewModeScaleToFill: 2,       ///&lt; 填充整个View
+    },
+    ZegoPublishFlag:
+    {
+        ZEGO_JOIN_PUBLISH: 0,         ///&lt; 连麦
+        ZEGO_MIX_STREAM: 1 &lt;&lt; 1,      ///&lt; 混流，如果推出的流需要作为混流输入，请用这个模式
+        ZEGO_SINGLE_ANCHOR: 1 &lt;&lt; 2,   ///&lt; 单主播
+    },
+    /** 音频设备类型 */
+    AudioDeviceType:
+    {
+        AudioDevice_Input: 0,      /**&lt; 输入设备 */
+        AudioDevice_Output: 1,     /**&lt; 输出设备 */
+    },
+    /** 设备状态 */
+    DeviceState:
+    {
+        Device_Added: 0,           /**&lt; 添加设备 */
+        Device_Deleted: 1,         /**&lt; 删除设备 */
+    },
+    /** 音量类型 */
+    VolumeType:
+    {
+        Volume_EndPoint: 0,        /**&lt; 设备音量 */
+        Volume_Simple: 1,              /**&lt; App 音量 */
+    },
+    ZegoAVAPIState:
+    {
+        AVStateBegin: 0,               ///&lt; 直播开始
+        AVStateEnd: 1,                 ///&lt; 直播正常停止
+        TempBroken: 2,                 ///&lt; 直播异常中断
+        FatalError: 3,                 ///&lt; 直播遇到严重的问题（如出现，请联系 ZEGO 技术支持）
+
+        CreateStreamError: 4,          ///&lt; 创建直播流失败
+        FetchStreamError: 5,           ///&lt; 获取流信息失败
+        NoStreamError: 6,              ///&lt; 无流信息
+        MediaServerNetWorkError: 7,    ///&lt; 媒体服务器连接失败
+        DNSResolveError: 8,            ///&lt; DNS 解释失败
+
+        NotLoginError: 9,              ///&lt; 未登陆
+        LogicServerNetWrokError: 10,   ///&lt; 逻辑服务器网络错误
+
+        PublishBadNameError: 105,
+        HttpDNSResolveError: 106,
+
+        PublishForbidError: (SEG_PUBLISH_FATAL_ERROR | 0x03f3),             ///&lt; 禁止推流, 低8位为服务端返回错误码：1011
+
+        PublishDeniedError: (SEG_PUBLISH_NORMAL_ERROR | 0x1),              ///&lt; 推流被拒绝
+
+        PlayStreamNotExistError: (SEG_PLAY_FATAL_ERROR | 0x03ec),          ///&lt; 拉的流不存在, 低8位为服务端返回错误码：1004
+        PlayForbidError: (SEG_PLAY_FATAL_ERROR | 0x03f3),                  ///&lt; 禁止拉流, 低8位为服务端返回错误码：1011
+
+        PlayDeniedError: (SEG_PLAY_NORMAL_ERROR | 0x1),                   ///&lt; 拉流被拒绝
+    },
+    EventType:
+    {
+        Play_BeginRetry: 1,        /**&lt; 开始重试拉流 */
+        Play_RetrySuccess: 2,      /**&lt; 重试拉流成功 */
+
+        Publish_BeginRetry: 3,     /**&lt; 开始重试推流 */
+        Publish_RetrySuccess: 4,   /**&lt; 重试推流成功 */
+
+        Play_TempDisconnected: 5,     /**&lt; 拉流临时中断 */
+        Publish_TempDisconnected: 6,  /**&lt; 推流临时中断 */
+
+        Play_VideoBreak: 7,           /**&lt; 拉流卡顿(视频) */
+    },
+    /** 音频设备模式 */
+    ZegoAVAPIAudioDeviceMode:
+    {
+        ZEGO_AUDIO_DEVICE_MODE_COMMUNICATION: 1,    /**&lt; 开启硬件回声消除 */
+        ZEGO_AUDIO_DEVICE_MODE_GENERAL: 2,          /**&lt; 关闭硬件回声消除 */
+        ZEGO_AUDIO_DEVICE_MODE_AUTO: 3              /**&lt; 根据场景自动选择是否开启硬件回声消除 */
+    },
+    /** 流量控制属性 */
+    ZegoTrafficControlProperty:
+    {
+        ZEGO_TRAFFIC_NONE: 0,                      /**&lt; 无 */
+        ZEGO_TRAFFIC_FPS: 1,                       /**&lt; 帧率 */
+        ZEGO_TRAFFIC_RESOLUTION: 1 &lt;&lt; 1,           /**&lt; 分辨率 */
+    },
+    ZEGONetType:
+    {
+        ZEGO_NT_NONE: 0,       /**&lt; 无网络 */
+        ZEGO_NT_LINE: 1,       /**&lt; 有线网络 */
+        ZEGO_NT_WIFI: 2,       /**&lt; 无线网络 */
+        ZEGO_NT_2G: 3,         /**&lt; 2G网络 */
+        ZEGO_NT_3G: 4,         /**&lt; 3G网络 */
+        ZEGO_NT_4G: 5,         /**&lt; 4G网络 */
+        ZEGO_NT_UNKNOWN: 32    /**&lt; 未知网络 */
+    },
+    ZegoStreamUpdateType:
+    {
+        StreamAdded: 2001,     /**&lt; 新增流 */
+        StreamDeleted: 2002,   /**&lt; 删除流 */
+    },
+    LiveRoomState:
+    {
+        Begin: 0,                      /**&lt; 开始 */
+
+        FatalError: 3,                 /**&lt; 直播遇到严重的问题（如出现，请联系 ZEGO 技术支持 */
+
+        CreateStreamError: 4,          /**&lt; 创建直播流失败 */
+        FetchStreamError: 5,           /**&lt; 获取流信息失败 */
+        NoStreamError: 6,              /**&lt; 无流信息 */
+        MediaServerNetWorkError: 7,    /**&lt; 媒体服务器连接失败 */
+        DNSResolveError: 8,            /**&lt; DNS 解释失败 */
+
+        NotLoginError: 9,              /**&lt; 未登陆 */
+        LogicServerNetWrokError: 10,   /**&lt; 逻辑服务器网络错误 */
+
+        PublishBadNameError: 105,      /**&lt; 推流名称错误 */
+        AddStreamError: 0x1 | kLiveRoomErrorBase,
+        ParameterError: 0x2 | kLiveRoomErrorBase,
+        MultiLoginError: 0x3 | kLiveRoomErrorBase,
+    },
+    /** Relay类别 */
+    ZegoRelayType:
+    {
+        RelayTypeNone: 1,
+        RelayTypeDati: 2,
+    },
+    /** 本地预览视频视图的模式 */
+    ZegoVideoViewMode:
+    {
+        ZegoVideoViewModeScaleAspectFit: 0,    /**&lt; 等比缩放，可能有黑边 */
+        ZegoVideoViewModeScaleAspectFill: 1,   /**&lt; 等比缩放填充整View，可能有部分被裁减 */
+        ZegoVideoViewModeScaleToFill: 2,       /**&lt; 填充整个View */
+    },
+    /** 录制源类型 */
+    RecordSourceType:
+    {
+        LocalVideo:0,
+        RemoteVideo:1,
+        Image:2
+    },
+    /** 延迟模式 */
+    ZegoAVAPILatencyMode:
+    {
+        ZEGO_LATENCY_MODE_NORMAL:0,                   /**&lt; 普通延迟模式 */
+        ZEGO_LATENCY_MODE_LOW:1,                      /**&lt; 低延迟模式，无法用于 RTMP 流 */
+        ZEGO_LATENCY_MODE_NORMAL2:2,                  /**&lt; 普通延迟模式，最高码率可达 192K */
+        ZEGO_LATENCY_MODE_LOW2:3,                     /**&lt; 低延迟模式，无法用于 RTMP 流。相对于 ZEGO_LATENCY_MODE_LOW 而言，CPU 开销稍低 */
+        ZEGO_LATENCY_MODE_LOW3:4,                     /**&lt; 低延迟模式，无法用于 RTMP 流。支持WebRTC必须使用此模式 */
+        ZEGO_LATENCY_MODE_NORMAL3:5                  /**&lt; 普通延迟模式，使用此模式前先咨询即构技术支持 */
+    },
+    ZegoMediaPlayerType:
+    {
+        ZegoMediaPlayerTypePlayer:0, // 本地播放模式，不会将音频混入推流中，只有调用端可以听到播放的声音。
+        ZegoMediaPlayerTypeAux:1     // 推流播放模式，会将音频混流推流中，调用端和拉流端都可以听到播放的
+    },
+    ZegoMediaPlayerIndex:
+    {
+        ZegoMediaPlayerIndexFirst:0,
+        ZegoMediaPlayerIndexSecond:1,
+        ZegoMediaPlayerIndexThird:2
+    }
+
+}
+
+module.exports = exports = ZEGOCONSTANTS;
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#activateAudioPlayStream">activateAudioPlayStream</a></li><li><a href="global.html#activateMediaSideInfo">activateMediaSideInfo</a></li><li><a href="global.html#activateVideoPlayStream">activateVideoPlayStream</a></li><li><a href="global.html#addRecordSource">addRecordSource</a></li><li><a href="global.html#enableAEC">enableAEC</a></li><li><a href="global.html#enableAGC">enableAGC</a></li><li><a href="global.html#enableANS">enableANS</a></li><li><a href="global.html#enableCamera">enableCamera</a></li><li><a href="global.html#enableCaptureMirror">enableCaptureMirror</a></li><li><a href="global.html#enableCaptureStereo">enableCaptureStereo</a></li><li><a href="global.html#enableCheckPoc">enableCheckPoc</a></li><li><a href="global.html#enableDTX">enableDTX</a></li><li><a href="global.html#enableLoopback">enableLoopback</a></li><li><a href="global.html#enableMic">enableMic</a></li><li><a href="global.html#enableMixSystemPlayout">enableMixSystemPlayout</a></li><li><a href="global.html#enableSpeaker">enableSpeaker</a></li><li><a href="global.html#enableTrafficControl">enableTrafficControl</a></li><li><a href="global.html#enableVAD">enableVAD</a></li><li><a href="global.html#getAudioDeviceList">getAudioDeviceList</a></li><li><a href="global.html#getCaptureSoundLevel">getCaptureSoundLevel</a></li><li><a href="global.html#getDefaultAudioDeviceId">getDefaultAudioDeviceId</a></li><li><a href="global.html#getDefaultVideoDeviceId">getDefaultVideoDeviceId</a></li><li><a href="global.html#getEngineVersion">getEngineVersion</a></li><li><a href="global.html#getMaxPlayChannelCount">getMaxPlayChannelCount</a></li><li><a href="global.html#getMicDeviceMute">getMicDeviceMute</a></li><li><a href="global.html#getMicDeviceVolume">getMicDeviceVolume</a></li><li><a href="global.html#getSDKVersion">getSDKVersion</a></li><li><a href="global.html#getSpeakerDeviceMute">getSpeakerDeviceMute</a></li><li><a href="global.html#getSpeakerDeviceVolume">getSpeakerDeviceVolume</a></li><li><a href="global.html#getSpeakerSimpleMute">getSpeakerSimpleMute</a></li><li><a href="global.html#getSpeakerSimpleVolume">getSpeakerSimpleVolume</a></li><li><a href="global.html#getVideoDeviceList">getVideoDeviceList</a></li><li><a href="global.html#initFontPath">initFontPath</a></li><li><a href="global.html#initSDK">initSDK</a></li><li><a href="global.html#loginRoom">loginRoom</a></li><li><a href="global.html#logoutRoom">logoutRoom</a></li><li><a href="global.html#mediaPlayerEnableRepeatMode">mediaPlayerEnableRepeatMode</a></li><li><a href="global.html#mediaPlayerGetAudioStreamCount">mediaPlayerGetAudioStreamCount</a></li><li><a href="global.html#mediaPlayerGetCurrentDuration">mediaPlayerGetCurrentDuration</a></li><li><a href="global.html#mediaPlayerGetDuration">mediaPlayerGetDuration</a></li><li><a href="global.html#mediaPlayerInitWithType">mediaPlayerInitWithType</a></li><li><a href="global.html#mediaPlayerLoad">mediaPlayerLoad</a></li><li><a href="global.html#mediaPlayerMuteLocal">mediaPlayerMuteLocal</a></li><li><a href="global.html#mediaPlayerPause">mediaPlayerPause</a></li><li><a href="global.html#mediaPlayerResume">mediaPlayerResume</a></li><li><a href="global.html#mediaPlayerSeekTo">mediaPlayerSeekTo</a></li><li><a href="global.html#mediaPlayerSetAudioStream">mediaPlayerSetAudioStream</a></li><li><a href="global.html#mediaPlayerSetPlayerType">mediaPlayerSetPlayerType</a></li><li><a href="global.html#mediaPlayerSetView">mediaPlayerSetView</a></li><li><a href="global.html#mediaPlayerSetVolume">mediaPlayerSetVolume</a></li><li><a href="global.html#mediaPlayerStart">mediaPlayerStart</a></li><li><a href="global.html#mediaPlayerStop">mediaPlayerStop</a></li><li><a href="global.html#mixStreamEx">mixStreamEx</a></li><li><a href="global.html#onEventHandler">onEventHandler</a></li><li><a href="global.html#playAudioFile">playAudioFile</a></li><li><a href="global.html#requireHardwareDecoder">requireHardwareDecoder</a></li><li><a href="global.html#requireHardwareEncoder">requireHardwareEncoder</a></li><li><a href="global.html#sendBigRoomMessage">sendBigRoomMessage</a></li><li><a href="global.html#sendCustomCommand">sendCustomCommand</a></li><li><a href="global.html#sendMediaSideInfo">sendMediaSideInfo</a></li><li><a href="global.html#sendRoomMessage">sendRoomMessage</a></li><li><a href="global.html#setAudioBitrate">setAudioBitrate</a></li><li><a href="global.html#setAudioChannelCount">setAudioChannelCount</a></li><li><a href="global.html#setAudioDevice">setAudioDevice</a></li><li><a href="global.html#setAudioDeviceMode">setAudioDeviceMode</a></li><li><a href="global.html#setAudioVolumeNotify">setAudioVolumeNotify</a></li><li><a href="global.html#setCustomPublishTarget">setCustomPublishTarget</a></li><li><a href="global.html#setGeneralConfig">setGeneralConfig</a></li><li><a href="global.html#setLatencyMode">setLatencyMode</a></li><li><a href="global.html#setLogDir">setLogDir</a></li><li><a href="global.html#setLogSize">setLogSize</a></li><li><a href="global.html#setLoopbackVolume">setLoopbackVolume</a></li><li><a href="global.html#setMicDeviceMute">setMicDeviceMute</a></li><li><a href="global.html#setMicDeviceVolume">setMicDeviceVolume</a></li><li><a href="global.html#setPlayQualityMonitorCycle">setPlayQualityMonitorCycle</a></li><li><a href="global.html#setPlayVolume">setPlayVolume</a></li><li><a href="global.html#setPreviewView">setPreviewView</a></li><li><a href="global.html#setPreviewViewMode">setPreviewViewMode</a></li><li><a href="global.html#setPublishStreamExtraInfo">setPublishStreamExtraInfo</a></li><li><a href="global.html#setRecordOutput">setRecordOutput</a></li><li><a href="global.html#setSpeakerDeviceMute">setSpeakerDeviceMute</a></li><li><a href="global.html#setSpeakerDeviceVolume">setSpeakerDeviceVolume</a></li><li><a href="global.html#setSpeakerSimpleMute">setSpeakerSimpleMute</a></li><li><a href="global.html#setSpeakerSimpleVolume">setSpeakerSimpleVolume</a></li><li><a href="global.html#setUseEnv">setUseEnv</a></li><li><a href="global.html#setVerbose">setVerbose</a></li><li><a href="global.html#setVideoBitrate">setVideoBitrate</a></li><li><a href="global.html#setVideoCaptureResolution">setVideoCaptureResolution</a></li><li><a href="global.html#setVideoCodecId">setVideoCodecId</a></li><li><a href="global.html#setVideoDevice">setVideoDevice</a></li><li><a href="global.html#setVideoEncodeResolution">setVideoEncodeResolution</a></li><li><a href="global.html#setVideoFPS">setVideoFPS</a></li><li><a href="global.html#setViewMode">setViewMode</a></li><li><a href="global.html#showRecordTimestamp">showRecordTimestamp</a></li><li><a href="global.html#snapshotRecord">snapshotRecord</a></li><li><a href="global.html#snapshotVideo">snapshotVideo</a></li><li><a href="global.html#startPlayingStream">startPlayingStream</a></li><li><a href="global.html#startPreview">startPreview</a></li><li><a href="global.html#startPublishing">startPublishing</a></li><li><a href="global.html#startRecord">startRecord</a></li><li><a href="global.html#stopAudioVolumeNotify">stopAudioVolumeNotify</a></li><li><a href="global.html#stopPlayingStream">stopPlayingStream</a></li><li><a href="global.html#stopPreview">stopPreview</a></li><li><a href="global.html#stopPublishing">stopPublishing</a></li><li><a href="global.html#stopRecord">stopRecord</a></li><li><a href="global.html#unInitSDK">unInitSDK</a></li><li><a href="global.html#updatePPTPath">updatePPTPath</a></li><li><a href="global.html#updateRecordImagePath">updateRecordImagePath</a></li><li><a href="global.html#uploadLog">uploadLog</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Fri May 10 2019 16:35:29 GMT+0800 (GMT+08:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

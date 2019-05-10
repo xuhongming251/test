@@ -1,0 +1,2032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: ZegoLiveRoom.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: ZegoLiveRoom.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file ZegoLiveRoom.js
+ * @copyright Zego @ 2018
+ */
+function ZegoLiveRoom() {
+    const path = require('path')
+      const WebGLRender = require(path.join(__dirname, './WebglRender.js'))
+      const ZegoAddon = require(path.join(__dirname, './ZegoLiveRoom.node'))
+      const ZEGOCONSTANTS = require(path.join(__dirname, './ZegoConstant.js'))
+  
+      const local_main_channel_render_ = new WebGLRender()
+      const local_aux_channel_render_ = new WebGLRender()
+  
+      let main_video_width_ = 0
+      let main_video_height_ = 0
+  
+      let aux_video_width_ = 0
+      let aux_video_height_ = 0
+  
+      let main_video_capture_buffer = null
+      let aux_video_capture_buffer = null
+  
+      const zego_base_ = new ZegoAddon.ZegoBase()
+      const zego_room_ = new ZegoAddon.ZegoRoom()
+      const zego_publish_stream_ = new ZegoAddon.ZegoPublishStream()
+      const zego_play_stream_ = new ZegoAddon.ZegoPlayStream()
+      const zego_im_ = new ZegoAddon.ZegoIM()
+      const zego_device_ = new ZegoAddon.ZegoDevice()
+      let zego_media_player_ = null
+      try {
+          zego_media_player_ = new ZegoAddon.ZegoMediaPlayer()
+      } catch (err) {
+          console.log('media player not supported. please update version')
+      }
+  
+      this.isToCoverView  = void 0
+      this.viewMode = 0
+      this.previewViewModes = {}
+      const play_list_ = []
+      const media_player_list_ = []
+      let on_paint_list_ = []
+  
+      zego_base_.registerEventHandler('onCaptureVideoSizeChanged', function (rs) {
+          //console.log("onCaptureVideoSizeChanged", rs);
+          // main index
+          if (rs.index == 0) {
+              if (main_video_width_ != rs.width || main_video_height_ != rs.height) {
+                  main_video_width_ = rs.width
+                  main_video_height_ = rs.height
+                  main_video_capture_buffer = Buffer.allocUnsafe(rs.width * rs.height * 4) // rgba buffer len
+                  zego_base_.initVideoCaptureBuffer(main_video_capture_buffer, rs.index, rs.width, rs.height)
+              }
+          } else if (rs.index == 1) {
+              // aux index
+              if (aux_video_width_ != rs.width || aux_video_height_ != rs.height) {
+                  aux_video_width_ = rs.width
+                  aux_video_height_ = rs.height
+                  aux_video_capture_buffer = Buffer.allocUnsafe(rs.width * rs.height * 4) // rgba buffer len
+                  zego_base_.initVideoCaptureBuffer(aux_video_capture_buffer, rs.index, rs.width, rs.height)
+              }
+          }
+      })
+  
+      zego_base_.registerEventHandler('onVideoSizeChanged', function (rs) {
+          //console.log("onVideoSizeChanged", rs, play_list_);
+          for (let i = 0; i &lt; play_list_.length; ++i) {
+              //console.log("in play_list_ ", play_list_[i].stream_id, rs.stream_id);
+              if (play_list_[i].stream_id == rs.stream_id) {
+                  //console.log("alloc buffer for play stream");
+                  play_list_[i].width = rs.width
+                  play_list_[i].height = rs.height
+                  play_list_[i].video_buffer = Buffer.allocUnsafe(rs.width * rs.height * 4) // rgba buffer len
+                  zego_base_.initVideoPlayBuffer(rs.stream_id, play_list_[i].video_buffer, play_list_[i].width, play_list_[i].height)
+                  break
+              }
+          }
+      })
+  
+      zego_base_.registerEventHandler('onMediaPlayerVideoSizeChanged', function (rs) {
+          //console.log("onMediaPlayerVideoSizeChanged", rs);
+          for (let i = 0; i &lt; media_player_list_.length; ++i) {
+              if (media_player_list_[i].player_index == rs.player_index) {
+                  //console.log("alloc buffer for media player stream");
+                  media_player_list_[i].width = rs.width
+                  media_player_list_[i].height = rs.height
+                  media_player_list_[i].video_buffer = Buffer.allocUnsafe(rs.width * rs.height * 4) // rgba buffer len
+                  zego_base_.initMediaPlayerBuffer(rs.player_index, media_player_list_[i].video_buffer, media_player_list_[i].width, media_player_list_[i].height)
+                  break
+              }
+          }
+      })
+  
+      this.onPaint = function (rs) {
+          if (rs &amp;&amp; rs.is_local_stream) {
+              if (rs.local_stream_channel == ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN) {
+                  if (rs.width == main_video_width_ &amp;&amp; rs.height == main_video_height_ &amp;&amp; main_video_capture_buffer) {
+                      //console.log("update main channel video");
+                      local_main_channel_render_.setViewMode(this.viewMode)
+                      local_main_channel_render_.draw(main_video_capture_buffer, main_video_width_, main_video_height_)
+                  } else {
+                      console.log('not init buffer, can not draw')
+                  }
+  
+              } else if (rs.local_stream_channel == ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_AUX) {
+                  if (rs.width == aux_video_width_ &amp;&amp; rs.height == aux_video_height_ &amp;&amp; aux_video_capture_buffer) {
+                      //console.log("update aux channel video");
+                      local_aux_channel_render_.setViewMode(this.viewMode)
+                      local_aux_channel_render_.draw(aux_video_capture_buffer, aux_video_width_, aux_video_height_)
+                  } else {
+                      console.log('not init buffer, can not draw')
+                  }
+              }
+          } else {
+              if (rs &amp;&amp; rs.is_media_player_stream) {
+                  for (let i = 0; i &lt; media_player_list_.length; ++i) {
+                      //console.log("in media_player_list_ player index = ", media_player_list_[i].player_index);
+                      if (media_player_list_[i].player_index == rs.player_index) {
+                          if (rs.width == media_player_list_[i].width &amp;&amp; rs.height == media_player_list_[i].height) {
+                              let previewMode = this.previewViewModes[media_player_list_[i].stream_id]
+                              previewMode = previewMode === void 0 ? 0 : previewMode
+                              media_player_list_[i].gl_render.setViewMode(previewMode)
+                              media_player_list_[i].gl_render.draw(media_player_list_[i].video_buffer, rs.width, rs.height)
+                              break
+                          }
+                      }
+                  }
+              } else {
+                  //console.log("is not local stream", rs);
+                  for (let i = 0; i &lt; play_list_.length; ++i) {
+                      //console.log("in play_list_ ", play_list_[i].stream_id, rs.stream_id);
+                      if (play_list_[i].stream_id == rs.stream_id) {
+                          if (rs.width == play_list_[i].width &amp;&amp; rs.height == play_list_[i].height) {
+                              let previewMode = this.previewViewModes[play_list_[i].stream_id]
+                              previewMode = previewMode === void 0 ? 0 : previewMode
+                              play_list_[i].gl_render.setViewMode(previewMode)
+                              play_list_[i].gl_render.draw(play_list_[i].video_buffer, rs.width, rs.height)
+                              break
+                          }
+                      }
+                  }
+              }
+          }
+      }
+  
+      this.onPaintAll = function () {
+          //console.log("on_paint_list_ len ", on_paint_list_.length);
+          for (let i = 0; i &lt; on_paint_list_.length; ++i) {
+              this.onPaint(on_paint_list_[i])
+          }
+          on_paint_list_ = []
+      }
+  
+      zego_base_.registerEventHandler('onVideoRefresh', rs => {
+          //console.log("onVideoRefresh",rs);
+          //this.onPaint(rs,0);
+          let i = 0
+          for (; i &lt; on_paint_list_.length; ++i) {
+              if (on_paint_list_[i].stream_id == rs.stream_id) {
+                  on_paint_list_[i] = rs
+                  break
+              }
+          }
+          if (on_paint_list_.length == i) {
+              on_paint_list_.push(rs)
+              window.requestAnimationFrame(this.onPaintAll.bind(this))
+          }
+      })
+  
+      zego_base_.registerEventHandler('onMediaPlayerVideoRefresh', rs => {
+          let i = 0
+          for (; i &lt; on_paint_list_.length; ++i) {
+              if (on_paint_list_[i].player_index == rs.player_index) {
+                  on_paint_list_[i] = rs
+                  break
+              }
+          }
+          if (on_paint_list_.length == i) {
+              on_paint_list_.push(rs)
+              window.requestAnimationFrame(this.onPaintAll.bind(this))
+          }
+      })
+  
+      /**
+       * 注册事件监听
+       * @param {string} event_name - 事件名称
+       * @param {function} cb 可以注册的事件有：
+       * @param {onAVKitEvent}  cb.cb SDK 引擎事件通知
+       * @param {onPlayStateUpdate}  cb.cb 拉流状态通知
+       * @param {onPlayQualityUpdate}  cb.cb 拉流质量更新事件通知
+       * @param {onPublishStateUpdate}  cb.cb 推流状态更新返回
+       * @param {onStreamUpdated}  cb.cb 流更新事件通知添加或者删除流的事件
+       * @param {onPublishQualityUpdate}  cb.cb 推流质量通知
+       * @param {onUserUpdate}  cb.cb 房间用户信息更新
+       * @param {onUpdateOnlineCount}  cb.cb 房间在线人数更新
+       * @param {onSendRoomMessage}  cb.cb 发送房间消息结果返回
+       * @param {onRecvRoomMessage}  cb.cb 收到房间消息通知
+       * @param {onSendBigRoomMessage}  cb.cb 发送大房间消息结果返回
+       * @param {onRecvBigRoomMessage}  cb.cb 收到大房间消息通知
+       * @param {onCustomCommand}  cb.cb 发送自定义消息结果返回
+       * @param {onRecvCustomCommand}  cb.cb 收到自定义消息通知
+       * @param {onStreamExtraInfoUpdated}  cb.cb 流额外信息更新通知
+       * @param {onAudioDeviceStateChanged}  cb.cb 音频设备状态更新通知
+       * @param {onVideoDeviceStateChanged}  cb.cb 视频设备状态更新通知
+       * @param {onAudioVolumeChanged}  cb.cb 音量变更事件通知
+       * @param {onDeviceError}  cb.cb 设备状态错误事件通知
+       * @param {onKickOut}  cb.cb 被挤掉线通知
+       * @param {onDisconnect}  cb.cb 已从房间断开连接
+       * @param {onReconnect}  cb.cb 与 server 重连成功通知
+       * @param {onTempBroken}  cb.cb 与 server 连接中断通知
+       * @param {onAVEngineStop}  cb.cb 引擎结束停止通知
+       * @param {onRecvMediaSideInfo} cb.cb 收到媒体次要信息通知
+       * @param {onMixStreamEx} cb.cb 混流结果回调通知
+       * @param {onSoundLevelInMixedPlayStream} cb.cb 混流音浪回调通知，在回调中可以拿到混流中每条的音量大小信息
+       * @return {boolean} - 是否注册成功
+       */
+      this.onEventHandler = function (event_name, cb) {
+          return zego_base_.registerEventHandler(event_name, cb)
+      }
+  
+      /**
+       * 初始化sdk
+       * @param {object} option - 初始化对象参数
+       * @param {string} option.app_id - app id ，需要向zego申请获取
+       * @param {(number|Array)} option.sign_key - sign key , 需要向zego申请获取
+       * @param {string} option.user_id - 唯一用户id
+       * @param {string} option.user_name - 用户名
+       * @param {boolean} option.enable_mediaplayer_publish - 是否开启mediaplayer的推流功能，开启后，使用主通道来推流mediaplayer播放的数据
+       * @param {boolean} option.enable_record - 是否开启录制功能，开启后推流辅通道被占用于录制功能
+       * @param {onInitSDK} cb - 初始化结果回调
+       * @return {boolean} 返回true表示正在初始化，false初始化失败
+       */
+      this.initSDK = function ({
+          app_id,
+          sign_key,
+          user_id,
+          user_name,
+          enable_mediaplayer_publish = false,
+          enable_record = false
+      }, cb) {
+          let ret = zego_base_.setUser(user_id, user_name)
+          if (ret) {
+              if (enable_mediaplayer_publish &amp;&amp; typeof (zego_base_.enableMediaPlayerPublish) === 'function') {
+                  zego_base_.enableMediaPlayerPublish(true)
+              }
+              if (enable_record &amp;&amp; typeof (zego_base_.enableRecord) === 'function') {
+                  zego_base_.enableRecord(true)
+              }
+              ret = zego_base_.initSDK(app_id, sign_key, cb, enable_mediaplayer_publish, enable_record)
+          }
+          return ret
+      }
+      /**
+       * 反初始化sdk
+       */
+      this.unInitSDK = function () {
+          return zego_base_.unInitSDK()
+      }
+      /**
+       * 获取sdk版本信息
+       * @return {string} sdk 版本信息
+       */
+      this.getSDKVersion = function () {
+          return zego_base_.getSDKVersion()
+      }
+      /**
+       * 获取引擎版本信息
+       * @return {string} 引擎版本信息
+       */
+      this.getEngineVersion = function () {
+          return zego_base_.getEngineVersion()
+      }
+      /**
+       * 配置sdk环境，测试环境、正式环境
+       * @param {object} option 参数对象
+       * @param {boolean} option.use_test_env - 是否使用测试环境
+       * @param {boolean} option.use_alpha_env - 是否使用alpha环境
+       */
+      this.setUseEnv = function ({
+          use_test_env,
+          use_alpha_env
+      }) {
+          zego_base_.setUseEnv(use_test_env, use_alpha_env)
+      }
+      /**
+       * 设置是否打印SDK控制台信息
+       * @param {object} option 参数对象
+       * @param {boolean} option.is_verbose - true - 打印， false - 不打印
+       */      
+      this.setVerbose = function({is_verbose})
+      {
+          zego_base_.setVerbose(is_verbose);
+      }
+      
+      /**
+       * 设置日志存储路径
+       * @param {object} option - 参数对象
+       * @param {string} option.log_dir - 配置sdk日志存储路径
+       * @return {boolean} 设置结果是否成功
+       */
+      this.setLogDir = function ({
+          log_dir
+      }) {
+          zego_base_.setLogDir(log_dir)
+      }
+      /**
+       * 配置日志最大文件大小
+       * @param {object} option - 参数对象
+       * @param {number} option.log_size - 日志文件最大大小值
+       */
+      this.setLogSize = function ({
+          log_size
+      }) {
+          zego_base_.setLogSize(log_size)
+      }
+      /**
+       * 上传sdk日志
+       */
+      this.uploadLog = function () {
+          zego_base_.uploadLog()
+      }
+  
+      this.enableAddonLog = function ({ enable }) {
+          zego_base_.enableAddonLog(enable)
+      }
+      
+  
+      /**
+       * 设置录制视频的右上角是否显示时间戳，调用本接口时，必须调用initFontPath来设置显示时间戳的字体
+       * @param {object} option - 参数对象
+       * @param {boolean} option.show_time_stamp - true-显示，false-不显示
+       */
+      this.showRecordTimestamp = function ({
+          show_time_stamp
+      }) {
+          zego_base_.showRecordTimestamp(show_time_stamp)
+      }
+  
+      /**
+       * 开始录制，目前该函数只在windows上支持，调用该函数前先调用setRecordOutput设置录制分辨率大小，调用addRecordSource添加录制源。
+       * @param {object} option - 参数对象
+       * @param {string} option.savefile - 录制文件保存路径
+       * @return {boolean} true 成功， false 失败
+       */
+      this.startRecord = function ({
+          savefile
+      }, cb) {
+          return zego_base_.startRecord(savefile, cb)
+      }
+  
+      /**
+       * 停止录制，目前该函数只在windows上支持
+       */
+      this.stopRecord = function () {
+          zego_base_.stopRecord()
+      }
+  
+      /**
+       * 初始化录制文件显示时间戳字体，目前该函数只在windows上支持
+       * @param {object} option - 参数对象
+       * @param {string} option.fontPath - 字体路径
+       */
+      this.initFontPath = function ({
+          fontPath
+      }) {
+          zego_base_.initFontPath(fontPath)
+      }
+  
+      /**
+       * 更新ppt图像路径，双录录制ppt更新，目前该函数只在windows上支持
+       * @param {object} option - 参数对象
+       * @param {string} option.pptPath - 图像路径
+       */
+      this.updatePPTPath = function ({
+          pptPath
+      }) {
+          zego_base_.updateRecordPPTPath(pptPath)
+      }
+  
+      /**
+       * 播放音频
+       * @param {object} option - 参数对象
+       * @param {string} option.audioFilePath - 音频文件路径
+       */
+      this.playAudioFile = function ({
+          audioFilePath
+      }) {
+          zego_base_.playAudioFile(audioFilePath)
+      }
+  
+      /**
+       * 设置录制输出分辨率，目前该函数只在windows上支持
+       * @param {object} option - 参数对象
+       * @param {number} option.width - 宽
+       * @param {number} option.height - 高
+       */
+      this.setRecordOutput = function ({
+          width,
+          height
+      }) {
+          zego_base_.setRecordOutput(width, height)
+      }
+      /**
+       * 添加录制源，目前该函数只在windows上支持
+       * @param {object} option - 参数对象
+       * @param {number} option.source_type - 录制源类型，取值查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.RecordSourceType&lt;/a>
+       * @param {number} option.pos_x - 录制源的起始位置x，(0,0)为左上角
+       * @param {number} option.pos_y - 录制源的起始位置y，(0,0)为左上角
+       * @param {number} option.width - 宽
+       * @param {number} option.height - 高
+       * @param {number} option.view_mode - 设置录制区域的缩放模式，0 - 等比缩放，可能有黑边，1 - 等比缩放填充整View，可能有部分被裁减，2 - 填充整个View
+       */
+      this.addRecordSource = function ({
+          source_type,
+          pos_x,
+          pos_y,
+          width,
+          height,
+          view_mode = 0
+      }) {
+          zego_base_.addRecordSource(source_type, pos_x, pos_y, width, height, view_mode)
+      }
+      /**
+       * 录制过程中对图片源进行更新的函数，目前该函数只在windows上支持
+       * @param {object} option - 参数对象
+       * @param {string} option.image_path - 图片本地路径
+       */
+      this.updateRecordImagePath = function ({
+          image_path
+      }) {
+          zego_base_.updateRecordImagePath(image_path)
+      }
+  
+      /**
+       * 录制过程拍照，只有启动录制后，拍照功能才生效
+       * @param {object} option - 参数对象
+       * @param {string} option.save_path - 拍照的存储路径，支持png和bmp
+       * @param {onSnapshotRecord} cb - 拍照结果回调
+       * @return {boolean} true-正在异步拍照录制，false-失败，路径为空、保存格式不是bmp或者png、没有启动录制，这3个原因都会导致录制失败，直接返回false
+       */
+      this.snapshotRecord = function ({
+          save_path
+      }, cb) {
+          zego_base_.snapshotRecord(save_path, cb)
+      }
+  
+      /**
+       * 截图拍照接口
+       * @param {object} option - 参数对象
+       * @param {object} option.video_type - 截图视频类型，0-本地视频，1-对端视频
+       * @param {object} option.save_path - 拍照的存储路径，支持png和bmp
+       *
+       */
+      this.snapshotVideo = function ({ video_type, save_path }, cb) {
+          zego_base_.snapshotVideo(video_type, save_path, cb)
+      }
+  
+      /**
+       * 激活使用媒体次要信息功能
+       * @param {object} option - 参数对象
+       * @param {number} option.channel_index - 通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       * @param {boolean} option.only_audio_publish - true - 纯音频直播，不传输视频数据, false 音视频直播，传输视频数据
+       */
+      this.activateMediaSideInfo = function ({ channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN , only_audio_publish = false}) {
+          zego_base_.activateMediaSideInfo(channel_index, only_audio_publish)
+      }
+  
+      /**
+       * 发送媒体次要信息，使用前先调用activateMediaSideInfo
+       * @param {object} option - 参数对象
+       * @param {string} option.side_info - 要发送的媒体次要信息
+       * @param {number} option.channel_index - 通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       *
+       */
+      this.sendMediaSideInfo = function ({ side_info, channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN }) {
+          zego_base_.sendMediaSideInfo(channel_index, side_info)
+      }
+      /**
+       * 设置选用分层编码
+       * @param {object} option - 参数对象
+       * @param {string} option.codec_id - 1为开启，0为关闭
+       * @param {number} option.channel_index - 通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       * @return {boolean} true-成功，false-失败
+       */
+      this.setVideoCodecId = function ({ codec_id, channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN }) {
+          zego_base_.setVideoCodecId(codec_id, channel_index)
+      }
+      /**
+       * 拉流是否接收音频数据,仅拉 UDP 流有效，必须在拉流后调用才有效
+       * @param {object} option - 参数对象
+       * @param {string} option.stream_id - 播放流 ID
+       * @param {boolean} option.is_active - true 接收，false 不接收
+       * @return {boolean} true-成功，false-失败
+       */
+      this.activateAudioPlayStream = function ({
+          stream_id,
+          is_active
+      }) {
+          zego_base_.activateAudioPlayStream(stream_id, is_active)
+      }
+  
+      /**
+       * 拉流是否接收视频数据
+       * @param {object} option - 参数对象
+       * @param {string} option.stream_id - 播放流 ID
+       * @param {boolean} option.is_active - true 接收，false 不接收
+       * @param {number} option.video_layer - 视频分层类型, -1 - 根据网络状态选择图层, 0 - 指定拉基本层（小分辨率）, 1 - 指定拉扩展层（大分辨率)
+       * @return {boolean} true-成功，false-失败
+       */
+      this.activateVideoPlayStream = function ({
+          stream_id,
+          is_active,
+          video_layer
+      }) {
+          zego_base_.activateVideoPlayStream(stream_id, is_active, video_layer)
+      }
+  
+      // ZegoRoom
+      /**
+       * 登录房间
+       * @param {object} option - 参数对象
+       * @param {string} option.room_id - 房间id
+       * @param {string} option.room_name - 房间名字
+       * @param {number} option.role - 角色，取值查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoRoomRole&lt;/a>
+       * @param {onLoginRoom} cb - 登录房间结果回调
+       * @return {boolean} true-正在异步登陆，false-失败
+       */
+      this.loginRoom = function ({
+          room_id,
+          room_name,
+          role
+      }, cb) {
+          return zego_room_.loginRoom(room_id, role, room_name, cb)
+      }
+      /**
+       * 登出房间
+       * @param {onLogoutRoom} cb - 登出房间结果回调
+       * @return {boolean} true-正在异步退出，false-失败
+       */
+      this.logoutRoom = function (cb) {
+          return zego_room_.logoutRoom(cb)
+      }
+  
+      // ZegoPublishStream
+      /**
+       * 设置本地摄像头预览目标
+       * @param {object} option - 参数对象
+       * @param {object} option.canvas_view - 预览的canvas标签对象，例如：document.getElementById("localVideo")
+       * @param {number} option.channel_index - 摄像头通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       * @return {boolean} true-成功，false-失败
+       */
+      this.setPreviewView = function ({
+          canvas_view,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          if (channel_index == ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN) {
+              // console.log("main channel");
+              return local_main_channel_render_.initGLfromCanvas(canvas_view)
+          } else if (channel_index == ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_AUX) {
+              // console.log("aux channel");
+              return local_aux_channel_render_.initGLfromCanvas(canvas_view)
+          }
+      }
+      /**
+       * 开始预览
+       * @param {object} option - 参数对象
+       * @param {number} option.channel_index - 摄像头通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       * @return {boolean} true-成功，false-失败
+       */
+      this.startPreview = function ({ channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN }) {
+          return zego_publish_stream_.startPreview(channel_index)
+      }
+      /**
+       * 停止预览
+       * @param {object} option - 参数对象
+       * @param {number} option.channel_index - 摄像头通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       * @return {boolean} true-成功， false-失败
+       */
+      this.stopPreview = function ({
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.stopPreview(channel_index)
+      }
+      /**
+       * 开始推流
+       * @param {object} option - 参数对象
+       * @param {string} option.title - 推流标题
+       * @param {string} option.stream_id - 推流流id
+       * @param {number} option.publish_flag - 推流flag，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoPublishFlag&lt;/a>
+       * @param {string} option.params - 推流附带参数
+       * @param {number} option.channel_index - 摄像头通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       * @param {number} option.media_player_index - 多实例mediaplayer下，需要推流哪个实例的播放器
+       * @return {boolean} true - 开始异步推流， false - 失败
+       */
+      this.startPublishing = function ({
+          title,
+          stream_id,
+          publish_flag,
+          params,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN,
+          media_player_index = 0
+      }) {
+          if (media_player_index != 0 &amp;&amp; typeof (zego_base_.setPublishMediaPlayerIndex) === 'function') {
+              zego_publish_stream_.setPublishMediaPlayerIndex(media_player_index)
+          }
+          return zego_publish_stream_.startPublishing(title, stream_id, publish_flag, params, channel_index)
+      }
+      /**
+       * 停止推流
+       * @param {object} option - 参数对象
+       * @param {string} option.msg 停止推流额外信息
+       * @param {number} option.channel_index 推流通道，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.stopPublishing = function ({
+          msg = 0,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.stopPublishing(msg, channel_index)
+      }
+      /**
+       * 是否使用摄像头
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true-开启， false-关闭
+       * @param {number} option.channel_index - 摄像头通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.enableCamera = function ({
+          enable = true,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.enableCamera(enable, channel_index)
+      }
+      /**
+       * 是否开启本地摄像头镜像模式
+       * @param {object} option -  参数对象
+       * @param {boolean} option.enable - true-使用镜像， false-不使用镜像模式
+       * @param {number} option.channel_index - 摄像头通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.enableCaptureMirror = function ({
+          enable = true,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.enableCaptureMirror(enable, channel_index)
+      }
+      /**
+       * 设置摄像头采集分辨率
+       * @param {object} option - 参数对象
+       * @param {number} option.width - 宽
+       * @param {number} option.height - 高
+       * @param {number} option.channel_index - 通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setVideoCaptureResolution = function ({
+          width,
+          height,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.setVideoCaptureResolution(width, height, channel_index)
+      }
+      /**
+       * 设置音频设备模式，确保在 initSDK 前调用
+       * @param {object} option  - 参数对象
+       * @param {number} option.device_mode - 模式，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoAVAPIAudioDeviceMode&lt;/a>
+       */
+      this.setAudioDeviceMode = function ({
+          device_mode
+      }) {
+          zego_publish_stream_.setAudioDeviceMode(device_mode)
+      }
+      /**
+       * 回声消除开关，建议在推流前调用设置
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 开启，false 关闭
+       */
+      this.enableAEC = function ({
+          enable
+      }) {
+          return zego_publish_stream_.enableAEC(enable)
+      }
+      /**
+       * 音频采集自动增益开关
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 开启，false 关闭
+       */
+      this.enableAGC = function ({
+          enable
+      }) {
+          return zego_publish_stream_.enableAGC(enable)
+      }
+      /**
+       * 音频采集噪声抑制开关
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 开启，false 关闭
+       */
+      this.enableANS = function ({
+          enable
+      }) {
+          return zego_publish_stream_.enableANS(enable)
+      }
+      /**
+       * 开启采集监听
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 开启，false 关闭
+       * @return {boolean} true 成功，false 失败
+       */
+      this.enableLoopback = function ({
+          enable
+      }) {
+          return zego_publish_stream_.enableLoopback(enable)
+      }
+      /**
+       * 设置监听音量,推流时可调用本 API 进行参数配置
+       * @param {object} option - 参数对象
+       * @param {number} option.volume - 音量大小，取值（0, 100）。默认 100
+       */
+      this.setLoopbackVolume = function ({
+          volume
+      }) {
+          return zego_publish_stream_.setLoopbackVolume(volume)
+      }
+      /**
+       * 硬件编码开关,如果要打开，需要在推流前设置,打开硬编硬解开关需后台可控，避免碰到版本升级或者硬件升级时出现硬编硬解失败的问题
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 开启，false 关闭。默认 false
+       */
+      this.requireHardwareEncoder = function ({
+          enable
+      }) {
+          return zego_publish_stream_.requireHardwareEncoder(enable)
+      }
+      /**
+       * 设置视频带宽比特率
+       * @param {object} option - 参数对象
+       * @param {number} option.bitrate - 比特率
+       * @param {number} option.channel_index - 通道索引 , 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setVideoBitrate = function ({ bitrate, channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN }) {
+          return zego_publish_stream_.setVideoBitrate(bitrate, channel_index)
+      }
+      /**
+       * 设置视频帧率
+       * @param {object} option - 参数对象
+       * @param {number} option.fps - 帧率
+       * @param {number} option.channel_index - 通道索引 , 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setVideoFPS = function ({
+          fps,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.setVideoFPS(fps, channel_index)
+      }
+      /**
+       * 设置视频编码分辨率
+       * @param {object} option - 参数对象
+       * @param {number} option.width - 宽
+       * @param {number} option.height - 高
+       * @param {number} option.channel_index - 通道索引, 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setVideoEncodeResolution = function ({
+          width,
+          height,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.setVideoEncodeResolution(width, height, channel_index)
+      }
+      /**
+       * 设置音频比特率
+       * @param {object} option - 参数对象
+       * @param {number} option.bitrate - 比特率值
+       */
+      this.setAudioBitrate = function ({
+          bitrate
+      }) {
+          return zego_publish_stream_.setAudioBitrate(bitrate)
+      }
+      /**
+       * 设置配置信息
+       * @param {object} option - 参数对象
+       * @param {string} option.config - 配置信息
+       *   配置项的写法，例如 "keep_audio_session_active=true", 等号后面值的类型要看下面每一项的定义
+       *   "prefer_play_ultra_source", int value, 确保在 InitSDK 前调用，但开启拉流加速(config为“prefer_play_ultra_source=1”)可在 InitSDK 之后，拉流之前调用
+       *   "camera_orientation_mode", string value: auto/hardcode/0/90/180/270. for Android, Windows。
+       *   "alsa_capture_device_name" string value: plughw:[card_id],[device_id], eg: plughw:1,0, default is plug:default. view the device list with arecord. for Linux。
+       *   "alsa_playback_device_name" string value: plughw:[card_id],[device_id], eg: plughw:1,0, default is plug:default. view the device list with aplay. for Linux。
+       */
+      this.setGeneralConfig = function ({
+          config
+      }) {
+          return zego_publish_stream_.setGeneralConfig(config)
+      }
+      /**
+       * 设置或更新推流的附加信息,更新流附加信息成功后，同一房间内的其他人会收到 onStreamExtraInfoUpdated 通知
+       * @param {object} option - 参数对象
+       * @param {string} option.extra_info - 流附加信息
+       * @param {number} option.channel_index - 推流 channel Index, 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setPublishStreamExtraInfo = function ({
+          extra_info,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_publish_stream_.setPublishStreamExtraInfo(extra_info, channel_index)
+      }
+      /**
+       * 自定义转推目的地
+       * @param {object} option - 参数对象
+       * @param {string} option.target_addr - 目的 rmtp 推流地址
+       * @param {number} option.channel_index - 推流 channel Index, 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setCustomPublishTarget = function ({
+          target_addr,
+          channel_index
+      }) {
+          return zego_publish_stream_.setCustomPublishTarget(target_addr, channel_index)
+      }
+      /**
+       * 设置推流音频声道数,必须在推流前设置
+       * @param {object} option - 参数对象
+       * @param {number} option.channel_count - 声道数，1 或 2，默认为 1（单声道）
+       */
+      this.setAudioChannelCount = function ({
+          channel_count
+      }) {
+          return zego_publish_stream_.setAudioChannelCount(channel_count)
+      }
+      /**
+       * 是否开启离散音频包发送,确保在推流前调用，只有纯 UDP 方案才可以调用此接口
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 开启，此时关闭麦克风后，不会发送静音包；false 关闭，此时关闭麦克风后会发送静音包
+       */
+      this.enableDTX = function ({
+          enable
+      }) {
+          return zego_publish_stream_.enableDTX(enable)
+      }
+      /**
+       * 是否开启流量控制,确保在推流前调用，在纯 UDP 方案才可以调用此接口
+       * @param {object} option - 参数对象
+       * @param {number} option.control_property - 流量控制属性 (帧率，分辨率）
+       * @param {boolean} option.enable - true 开启，false 关闭。默认开启
+       */
+      this.enableTrafficControl = function ({
+          control_property,
+          enable
+      }) {
+          return zego_publish_stream_.enableTrafficControl(control_property, enable)
+      }
+      /**
+       * 帧顺序检测开关
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable true 检测帧顺序，不支持B帧； false 不检测帧顺序，支持B帧，可能出现短暂花屏
+       */
+      this.enableCheckPoc = function ({
+          enable
+      }) {
+          return zego_publish_stream_.enableCheckPoc(enable)
+      }
+  
+      /**
+       * @param {object} option - 参数对象
+       * @param {number} option.mode - 延时模式,取值查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoAVAPILatencyMode&lt;/a>
+       * 0 - 普通延迟模式；
+       * 1 - 低延迟模式，无法用于 RTMP 流；
+       * 2 - 普通延迟模式，最高码率可达 192K；
+       * 3 - 低延迟模式，无法用于 RTMP 流。相对于 ZEGO_LATENCY_MODE_LOW 而言，CPU 开销稍低；
+       * 4 - 低延迟模式，无法用于 RTMP 流。支持WebRTC必须使用此模式；
+       * 5 - 普通延迟模式，使用此模式前先咨询即构技术支持；
+       */
+      this.setLatencyMode = function ({
+          mode
+      }) {
+          return zego_publish_stream_.setLatencyMode(mode)
+      }
+  
+      // ZegoPlayStream
+      /**
+       * 拉流播放
+       * @param {object} option - 参数对象
+       * @param {string} option.stream_id - 流id
+       * @param {string} option.canvas_view - 要显示的 canvas 对象
+       * @param {string} option.param - 拉流参数，要与推流参数一致
+       */
+      this.startPlayingStream = function ({
+          stream_id,
+          canvas_view,
+          param
+      }) {
+          for (let i = 0; i &lt; play_list_.length; ++i) {
+              if (play_list_[i].stream_id == stream_id) {
+                  //console.log("have aready in list");
+                  return zego_play_stream_.startPlayingStream(stream_id, param)
+              }
+          }
+          const render = new WebGLRender()
+          render.initGLfromCanvas(canvas_view)
+          play_list_.push({
+              stream_id,
+              canvas_view,
+              gl_render: render
+          })
+          //console.log("startPlayingStream play_list_ = ", play_list_);
+          return zego_play_stream_.startPlayingStream(stream_id, param)
+      }
+      /**
+       * 停止拉流
+       * @param {object} option - 参数对象
+       * @param {string} option.stream_id - 流id
+       */
+      this.stopPlayingStream = function ({
+          stream_id
+      }) {
+          for (let i = 0; i &lt; play_list_.length; ++i) {
+              if (play_list_[i].stream_id == stream_id) {
+                  play_list_.splice(i, 1)
+                  //console.log("remove from play list");
+                  break
+              }
+          }
+          return zego_play_stream_.stopPlayingStream(stream_id)
+      }
+      /**
+       * 硬件解码,如果要打开，需要在拉流前设置,打开硬编硬解开关需后台可控，避免碰到版本升级或者硬件升级时出现硬编硬解失败的问题
+       * @param {object} option - 参数对象
+       * @param {boolean} option.required - true 打开，false 关闭。默认 false
+       */
+      this.requireHardwareDecoder = function ({
+          required
+      }) {
+          return zego_play_stream_.requireHardwareDecoder(required)
+      }
+      /**
+       * （声音输出）静音开关, 设置为关闭后，默认扬声器和耳机均无声音输出
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true 不静音，false 静音。默认 true
+       * @return {boolean} true 成功，false 失败
+       */
+      this.enableSpeaker = function ({
+          enable
+      }) {
+          return zego_play_stream_.enableSpeaker(enable)
+      }
+      /**
+       * 设置播放音量
+       * @param {object} option - 参数对象
+       * @param {number} option.volume - 音量取值范围为(0, 100)，数值越大，音量越大。默认 100
+       */
+      this.setPlayVolume = function ({
+          volume
+      }) {
+          return zego_play_stream_.setPlayVolume(volume)
+      }
+      /**
+       * 获取 SDK 支持的最大同时播放流数
+       * @return {number} 最大支持播放流数
+       */
+      this.getMaxPlayChannelCount = function () {
+          return zego_play_stream_.getMaxPlayChannelCount()
+      }
+      /**
+       * 设置拉流质量监控周期
+       * @param {object} option - 参数对象
+       * @param {number} option.cycle_ms - 时间周期，单位为毫秒，取值范围为(500, 60000)。默认为 3000
+       * @return {boolean} true 成功，false 失败
+       */
+      this.setPlayQualityMonitorCycle = function ({
+          cycle_ms
+      }) {
+          return zego_play_stream_.setPlayQualityMonitorCycle(cycle_ms)
+      }
+  
+      // ZegoIM
+      /**
+       * 发送聊天室消息
+       * @param {object} option - 参数对象
+       * @param {number} option.msg_type - 消息类型，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoMessageType&lt;/a>
+       * @param {number} option.msg_category - 消息分类， 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoMessageCategory&lt;/a>
+       * @param {string} option.msg_content - 消息内容
+       * @return {number} 返回消息的seq
+       */
+      this.sendRoomMessage = function ({
+          msg_type,
+          msg_category,
+          msg_content
+      }) {
+          return zego_im_.sendRoomMessage(msg_type, msg_category, msg_content)
+      }
+      /**
+       * 发送不可靠信道消息，主要用于大并发的场景，发送一些非必须到达的消息
+       * @param {object} option - 参数对象
+       * @param {number} option.msg_type - 消息类型，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoMessageType&lt;/a>
+       * @param {number} option.msg_category - 消息分类， 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoMessageCategory&lt;/a>
+       * @param {string} option.msg_content - 消息内容
+       * @return {number} 返回消息的seq
+       */
+      this.sendBigRoomMessage = function ({
+          msg_type,
+          msg_category,
+          msg_content
+      }) {
+          return zego_im_.sendBigRoomMessage(msg_type, msg_category, msg_content)
+      }
+      /**
+       * 发送自定义消息
+       * @param {object} option - 参数对象
+       * @param {object|array}  option.member_list - 发送目标列表，数据格式为：[{user_id:'1', user_name:'1'},{user_id:'2', user_name:'3'}]
+       * @param {string} option.msg_content - 消息内容
+       */
+      this.sendCustomCommand = function ({
+          member_list,
+          msg_content
+      }) {
+          return zego_im_.sendCustomCommand(member_list, msg_content)
+      }
+  
+      // ZegoDevice
+      /**
+       * 获取音频设备列表
+       * @param {object} option - 参数对象
+       * @param {number} option.device_type - 设备类型，查看&lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.AudioDeviceType&lt;/a>
+       * @return {object|array} 返回音频设备id和名字的对象列表
+       */
+      this.getAudioDeviceList = function ({
+          device_type
+      }) {
+          return zego_device_.getAudioDeviceList(device_type)
+      }
+      /**
+       * 设置音频设备模式
+       * @param {object} option - 参数对象
+       * @param {number} option.device_type - 设备类型，查看&lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.AudioDeviceType&lt;/a>
+       */
+      this.setAudioDevice = function ({
+          device_type,
+          device_id
+      }) {
+          return zego_device_.setAudioDevice(device_type, device_id)
+      }
+      /**
+       * 获取视频设备列表
+       * @return {object | array} - 返回视频设备id和名字的对象列表
+       */
+      this.getVideoDeviceList = function () {
+          return zego_device_.getVideoDeviceList()
+      }
+      /**
+       * 设置选用视频设备
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 设备id
+       * @param {number} option.channel_index - 通道索引，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.PublishChannelIndex&lt;/a>
+       */
+      this.setVideoDevice = function ({
+          device_id,
+          channel_index = ZEGOCONSTANTS.PublishChannelIndex.PUBLISH_CHN_MAIN
+      }) {
+          return zego_device_.setVideoDevice(device_id, channel_index)
+      }
+      /**
+       * 开启系统声卡声音采集
+       */
+      this.enableMixSystemPlayout = function () {
+          return zego_device_.enableMixSystemPlayout()
+      }
+      /**
+       * 获取麦克风音量，切换麦克风后需要重新获取麦克风音量
+       * @param {object} option - 参数对像
+       * @param {string} option.device_id - 设备id
+       * @return {number} -1: 获取失败，0~100 麦克风音量
+       */
+      this.getMicDeviceVolume = function ({
+          device_id
+      }) {
+          return zego_device_.getMicDeviceVolume(device_id)
+      }
+      /**
+       * 设置麦克风音量
+       * @param {object} option - 参数对像
+       * @param {string} option.device_id - 麦克风 deviceId
+       * @param {number} option.volume - 音量，取值(0,100)
+       */
+      this.setMicDeviceVolume = function ({
+          device_id,
+          volume
+      }) {
+          return zego_device_.setMicDeviceVolume(device_id, volume)
+      }
+      /**
+       * 获取麦克风是否静音
+       * @param {object} option - 参数对像
+       * @param {string} option.device_id - 麦克风 deviceId
+       */
+      this.getMicDeviceMute = function ({
+          device_id
+      }) {
+          return zego_device_.getMicDeviceMute(device_id)
+      }
+      /**
+       * 设置麦克风静音
+       * @param {object} option - 参数对像
+       * @param {string} option.device_id - 麦克风 deviceId
+       * @param {boolean} option.is_mute - true 静音，false 不静音
+       */
+      this.setMicDeviceMute = function ({
+          device_id,
+          is_mute
+      }) {
+          return zego_device_.setMicDeviceMute(device_id, is_mute)
+      }
+  
+      /**
+       * 获取扬声器音量
+       * @param {object} option - 参数对像
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @return {number} - -1: 获取失败，0~100 麦克风音量
+       */
+      this.getSpeakerDeviceVolume = function ({
+          device_id
+      }) {
+          return zego_device_.getSpeakerDeviceVolume(device_id)
+      }
+  
+      /**
+       * 设置扬声器音量
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @param {number} option.volume - 音量，取值 (0，100)
+       */
+      this.setSpeakerDeviceVolume = function ({
+          device_id,
+          volume
+      }) {
+          return zego_device_.setSpeakerDeviceVolume(device_id, volume)
+      }
+  
+      /**
+       * 获取 App 中扬声器音量
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @return {number} -1: 获取失败，0~100 扬声器音量
+       */
+      this.getSpeakerSimpleVolume = function ({
+          device_id
+      }) {
+          return zego_device_.getSpeakerSimpleVolume(device_id)
+      }
+  
+      /**
+       * 设置 App 中扬声器音量
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @param {number} option.volume - 音量，取值 (0，100)
+       */
+      this.setSpeakerSimpleVolume = function ({
+          device_id,
+          volume
+      }) {
+          return zego_device_.setSpeakerSimpleVolume(device_id, volume)
+      }
+  
+      /**
+       * 获取扬声器是否静音
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @return {boolean} - true 静音，false 不静音
+       */
+      this.getSpeakerDeviceMute = function ({
+          device_id
+      }) {
+          return zego_device_.getSpeakerDeviceMute(device_id)
+      }
+  
+      /**
+       * 设置扬声器静音
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @param {boolean} option.is_mute - 静音，false 不静音
+       */
+      this.setSpeakerDeviceMute = function ({
+          device_id,
+          is_mute
+      }) {
+          return zego_device_.setSpeakerDeviceMute(device_id, is_mute)
+      }
+  
+      /**
+       * 获取 App 中扬声器是否静音
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @return {boolean} true - 静音，false 不静音
+       */
+      this.getSpeakerSimpleMute = function ({
+          device_id
+      }) {
+          return zego_device_.getSpeakerSimpleMute(device_id)
+      }
+  
+      /**
+       * 设置 App 中扬声器静音
+       * @param {object} option - 参数对象
+       * @param {string} option.device_id - 扬声器 deviceId
+       * @param {boolean} option.is_mute - true 静音，false 不静音
+       */
+      this.setSpeakerSimpleMute = function ({
+          device_id,
+          is_mute
+      }) {
+          return zego_device_.setSpeakerSimpleMute(device_id, is_mute)
+      }
+  
+      /**
+       * 获取默认的音频设备
+       * @param {object} option - 参数对象
+       * @param {number} option.device_type - 设备类型，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.AudioDeviceType&lt;/a>
+       * @param {string} - 设备id
+       */
+      this.getDefaultAudioDeviceId = function ({
+          device_type
+      }) {
+          return zego_device_.getDefaultAudioDeviceId(device_type)
+      }
+      
+      /**
+       * 获取默认的摄像头设备
+       */
+      this.getDefaultVideoDeviceId = function () {
+          return zego_device_.getDefaultVideoDeviceId()
+      }
+  
+      /**
+       * 监听设备的音量变化，设置后如果有音量变化（包括 app 音量）通过 onAudioVolumeChanged 事件通知
+       * @param {object} option - 参数对象
+       * @param {number} option.device_type - 设备类型，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.AudioDeviceType&lt;/a>
+       * @param {string} option.device_id - 设备id
+       */
+      this.setAudioVolumeNotify = function ({
+          device_type,
+          device_id
+      }) {
+          return zego_device_.setAudioVolumeNotify(device_type, device_id)
+      }
+      /**
+       * 停止监听设备的音量变化
+       * @param {object} option - 参数对象
+       * @param {number} option.device_type - 设备类型，查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.AudioDeviceType&lt;/a>
+       * @param {string} option.device_id - 设备id
+       */
+      this.stopAudioVolumeNotify = function ({
+          device_type,
+          device_id
+      }) {
+          return zego_device_.stopAudioVolumeNotify(device_type, device_id)
+      }
+      /**
+       * 开启麦克风
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable true 打开，false 关闭。麦克风默认是打开
+       * @returns {boolean} true - 成功， false - 失败
+       */
+      this.enableMic = function({enable})
+      {
+        return zego_device_.enableMic(enable);
+      }
+      /**
+       * 是否开启语音活动检测, 确保在推流前调用，只有纯 UDP 方案才可以调用此接口
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable 开启；false 关闭，默认关闭
+       * @returns {boolean} true - 成功， false - 失败
+       */
+      this.enableVAD = function({enable})
+      {
+        return zego_device_.enableVAD(enable);
+      }
+
+      /**
+       * 获取当前采集的音量
+       * @returns {float} 当前采集音量大小
+       */
+      this.getCaptureSoundLevel = function()
+      {
+        return zego_device_.getCaptureSoundLevel();
+      }
+      
+      /**
+       * 设置双声道采集，仅windows平台支持
+       * @param {object} option - 参数对象
+       * @param {number} option.capture_type - default is 0. 0:capture mono any time; 1: capture stereo any time;2: capture mono when voice chat(publish and play at the same time), capture stereo when only publish.PS: Do not do inner processing when capture stereo.
+       * @returns {boolean} true-设置成功，false-设置失败
+       */      
+      this.enableCaptureStereo = function({capture_type})
+      {
+          return zego_device_.enableCaptureStereo(capture_type);
+      }
+      
+      /**
+       * 初始化播放器
+       * @param {object} option - 参数对象
+       * @param {number} option.type - 媒体播放器类型, 0 - 本地播放模式，不会将音频混入推流中，只有调用端可以听到播放的声音，1 - 推流播放模式，会将音频混流推流中，调用端和拉流端都可以听到播放的。 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoMediaPlayerType&lt;/a>
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerInitWithType = function ({
+          type,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerInitWithType(type, player_index)
+      }
+      /**
+       * 设置音量
+       * @param {object} option - 参数对象
+       * @param {number} option.volume - 音量
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerSetVolume = function ({
+          volume,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerSetVolume(volume, player_index)
+      }
+  
+      /**
+       * 开始播放
+       * @param {object} option - 参数对象
+       * @param {number} option.volume - 音量
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerStart = function ({
+          path,
+          repeat,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerStart(path, repeat, player_index)
+      }
+  
+      /**
+       * 停止播放
+       * @param {object} option - 参数对象
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerStop = function ({
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerStop(player_index)
+      }
+  
+      /**
+       * 暂停播放
+       * @param {object} option - 参数对象
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerPause = function ({
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerPause(player_index)
+      }
+  
+      /**
+       * 恢复播放
+       * @param {object} option - 参数对象
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerResume = function ({
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerResume(player_index)
+      }
+  
+      /**
+       * 设置指定的进度进行播放
+       * @param {object} option - 参数对象
+       * @param {number} option.duration - 指定的进度，单位毫秒
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerSeekTo = function ({
+          duration,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerSeekTo(duration, player_index)
+      }
+  
+      /**
+       * 获取整个文件的播放时长
+       * @param {object} option - 参数对象
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       * @return {number} 文件的播放时长，单位毫秒
+       */
+      this.mediaPlayerGetDuration = function ({
+          player_index = 0
+      }) {
+          return zego_media_player_.mediaPlayerGetDuration(player_index)
+      }
+  
+      /**
+       * 获取当前播放的进度
+       * @param {object} option - 参数对象
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       * @return {number} 当前播放进度，单位毫秒
+       */
+      this.mediaPlayerGetCurrentDuration = function ({
+          player_index = 0
+      }) {
+          return zego_media_player_.mediaPlayerGetCurrentDuration(player_index)
+      }
+  
+      /**
+       * 设置本地静默播放
+       * @param {object} option - 参数对象
+       * @param {boolean} option.mute - 是否静默播放, 如果mediaPlayerInitWithType设置了 1 模式, 推出的流是有声音的
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerMuteLocal = function ({
+          mute,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerMuteLocal(mute, player_index)
+      }
+  
+      /**
+       * 预加载资源
+       * @param {object} option - 参数对象
+       * @param {boolean} option.path - 媒体文件的路径
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerLoad = function ({
+          path,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerLoad(path, player_index)
+      }
+  
+      /**
+       * 设置显示视频的view
+       * @param {object} option - 参数对象
+       * @param {boolean} option.canvas_view - 要显示的canvas
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerSetView = function ({
+          canvas_view,
+          player_index = 0
+      }) {
+          for (let i = 0; i &lt; media_player_list_.length; ++i) {
+              if (media_player_list_[i].player_index == player_index) {
+                  const render = new WebGLRender()
+                  render.initGLfromCanvas(canvas_view)
+                  media_player_list_[i].canvas_view = canvas_view
+                  media_player_list_[i].gl_render = render
+                  return
+              }
+          }
+          const render = new WebGLRender()
+          render.initGLfromCanvas(canvas_view)
+          media_player_list_.push({
+              player_index,
+              canvas_view,
+              gl_render: render
+          })
+      }
+  
+      /**
+       * 设置播放文件的音轨
+       * @param {object} option - 参数对象
+       * @param {boolean} option.stream_index - 音轨序号，可以通过 mediaPlayerGetAudioStreamCount 接口获取音轨个数
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerSetAudioStream = function ({
+          stream_index,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerSetAudioStream(stream_index, player_index)
+      }
+  
+      /**
+       * 设置播放器类型
+       * @param {object} option - 参数对象
+       * @param {boolean} option.type - 媒体播放器类型, 0 - 本地播放模式，不会将音频混入推流中，只有调用端可以听到播放的声音，1 - 推流播放模式，会将音频混流推流中，调用端和拉流端都可以听到播放的。 查看 &lt;a href="./ZegoConstant.js.html" target="_blank">ZEGOCONSTANTS.ZegoMediaPlayerType&lt;/a>
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerSetPlayerType = function ({
+          type,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerSetPlayerType(type, player_index)
+      }
+  
+      /**
+       * 获取音轨个数
+       * @param {object} option - 参数对象
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       * @return {number} 音轨个数
+       */
+      this.mediaPlayerGetAudioStreamCount = function ({
+          player_index = 0
+      }) {
+          return zego_media_player_.mediaPlayerGetAudioStreamCount(player_index)
+      }
+  
+      /**
+       * 设置是否循环播放
+       * @param {object} option - 参数对象
+       * @param {boolean} option.enable - true: 循环播放，false: 不循环播放
+       * @param {number} option.player_index - 播放器序号, 默认为0，多实例下用来区分哪个播放器
+       */
+      this.mediaPlayerEnableRepeatMode = function ({
+          enable,
+          player_index = 0
+      }) {
+          zego_media_player_.mediaPlayerEnableRepeatMode(enable, player_index)
+      }
+            
+      /**
+       * 设置分层编码
+       * @param  {1|0} enable
+       */
+      this.setVideoCodecId = function(enable = 1) {
+          return zego_base_.setVideoCodecId(Boolean(enable) ? 1 : 0)
+      }
+      
+      /**
+       * 设置预览视频渲染模式
+       * @param {object} option - 参数对象
+       * @param {0|1|2}  option.mode - 0 为 等比缩放，不足部分会有黑边；1 为等比缩放填充整个 view；多余部分会被裁剪；2 为完全填充整个 view，不会多余和裁剪
+       */
+      this.setViewMode = function({ mode }) {
+          this.viewMode = mode  === void 0 ? 1 : mode
+      }
+  
+  
+      /**
+       * 设置拉流视频渲染模式
+       * @param {object} option - 参数对象
+       * @param {0|1|2}  option.mode - 0 为 等比缩放，不足部分会有黑边；1 为等比缩放填充整个 view；多余部分会被裁剪；2 为完全填充整个 view，不会多余和裁剪
+       */
+      this.setPreviewViewMode = function({ mode, stream_id }) {
+          if (stream_id !== void 0) {
+              this.previewViewModes[stream_id] = mode  === void 0 ? 0 : mode
+          }
+      }
+      
+      /**
+       *  混流接口，支持混流一路或者多路输出
+       * @param {object} option - 参数对象
+       * @param {string} option.mix_stream_id - 混流任务id，标识唯一混流任务，调用方应该保证 mix_stream_id 的唯一性。如果 mix_stream_id 相同，服务端就认为是更新同一个混流。
+       * @param {number} option.output_fps - 混流输出帧率
+       * @param {number} option.output_width - 混流输出视频分辨率宽
+       * @param {number} option.output_height - 混流输出视频分辨率高
+       * @param {number} option.output_rate_control_mode - 混流输出码率控制模式，0 表示 CBR 恒定码率，1 表示 CRF 恒定质量，默认为 0
+       * @param {number} option.output_bitrate - 混流输出码率，输出码率控制模式设置为 CBR恒定码率时有效
+       * @param {number} option.output_quality - 混流输出质量，输出码率控制模式设置为 CRF恒定质量时有效，有效范围 0-51，默认值是 23
+       * @param {number} option.channels - 混流声道数，默认为单声道
+       * @param {number} option.output_audio_config - 混流输出音频格式
+       * @param {number} option.output_audio_bitrate - 混流输出音频码率
+       * @param {number} option.output_background_color - 混流背景颜色，前三个字节为 RGB 颜色值，即 0xRRGGBBFF。如 0x0000FFFF 为黄色
+       * @param {string} option.output_background_image - 混流背景图，支持预设图片，如 (preset-id://zegobg.png) 
+       * @param {boolean} option.with_sound_level - 是否开启音浪。true：开启，false：关闭。开启音浪后，拉混流时可以收到混流前的每条流的音量信息回调。
+       * @param {boolean} option.single_stream_pass_through - 混流输入为一条流时，混流输出的属性与单流一致(分辨率，编码格式等)，若需要开启此功能，请与即构技术支持联系
+       * @param {string} option.user_data - 用户自定义数据，接收端通过媒体次要信息onRecvMediaSideInfo 接口回调
+       * @param {number} option.extra - 扩展信息，备用
+       * @param {object|array} option.input_stream_list - 混流输入流对象数组列表，输入流信息对象的属性如下：
+       * @param {string} option.input_stream_list.stream_id - 流id
+       * @param {number} option.input_stream_list.sound_level_id - 音浪id，用于标识用户，注意大小是32位无符号数
+       * @param {number} option.input_stream_list.content_control - 推流内容控制，0表示音视频都要，1表示只要音频，2表示只要视频。默认值：0
+       * @param {object} option.input_stream_list.layout - 流的布局对象，布局对象属性如下：
+       * @param {number} option.input_stream_list.layout.left - 左上角点x坐标
+       * @param {number} option.input_stream_list.layout.top - 左上角点y坐标
+       * @param {number} option.input_stream_list.layout.right - 右下角点x坐标
+       * @param {number} option.input_stream_list.layout.bottom - 右下角点y坐标
+       * @param {object|array} option.output_stream_list - 混流输出目标对象数组列表，目标输出流对象属性如下：
+       * @param {boolean} option.output_stream_list.is_url -  true: target 为完整 RTMP URL，false: target 为流名
+       * @param {string} option.output_stream_list.target - 当is_url为true 时， target 为完整 RTMP URL，当is_url为false时，target 为混流流id ，拉混流时要通过该id进行拉混流
+       * @param {object} option.output_watermark - 混流水印对象，水印对象属性如下：
+       * @param {string} option.output_watermark.image - 水印图片，支持预设图片，如 (preset-id://zegowp.png) 
+       * @param {object} option.output_watermark.layout - 混流水印布局，布局对象属性如下：
+       * @param {number} option.output_watermark.layout.left - 左上角点x坐标
+       * @param {number} option.output_watermark.layout.top - 左上角点y坐标
+       * @param {number} option.output_watermark.layout.right - 右下角点x坐标
+       * @param {number} option.output_watermark.layout.bottom - 右下角点y坐标
+       * @return {number} 返回 seq ，如果seq > 0 表示调用成功，而且这个返回值会和 onMixStreamEx 的参数 seq 一一匹配。
+       *  
+       */
+      this.mixStreamEx = function({
+            mix_stream_id = "",
+            output_fps = 15,
+            output_width = 1920,
+            output_height = 1080,
+            output_rate_control_mode = 0,
+            output_bitrate = 12000,
+            output_quality = 23,
+            channels = 1,
+            output_audio_config = 0,
+            output_audio_bitrate = 80,
+            output_background_color = 0x000000ff,
+            output_background_image ="",
+            with_sound_level = true, 
+            single_stream_pass_through = false,
+            user_data = "",
+            extra = 0,
+            input_stream_list = [],
+            output_stream_list = [],
+            output_watermark
+        })
+      {
+          try
+          {
+              zego_base_.initMixStreamConfig();
+              
+              zego_base_.setMixStreamOutputFps(output_fps);
+              zego_base_.setMixStreamOutputResolution(output_width, output_height);
+              zego_base_.setMixStreamOutputQualityControl(output_rate_control_mode, output_bitrate, output_quality);
+              zego_base_.setMixStreamOutputAudioConfig(channels, output_audio_config, output_audio_bitrate);
+              zego_base_.setMixStreamOutputBackground(output_background_color, output_background_image);
+              zego_base_.enableMixStreamOutputWithSoundLevel(with_sound_level);
+              zego_base_.enableMixStreamOutputWithSigleStreamPassThrough(single_stream_pass_through);
+              zego_base_.setMixStreamOutputUserData(user_data);
+              zego_base_.setMixStreamOutputExtraData(extra);
+              zego_base_.setMixStreamWaterMark(output_watermark.image, output_watermark.layout.top, output_watermark.layout.left, output_watermark.layout.bottom, output_watermark.layout.right);
+                            
+              for (let i = 0; i &lt; input_stream_list.length; ++i) 
+              {
+                  zego_base_.addInputStreamForMixStream(input_stream_list[i].stream_id, input_stream_list[i].sound_level_id, input_stream_list[i].content_control, input_stream_list[i].layout.top, input_stream_list[i].layout.left, input_stream_list[i].layout.bottom, input_stream_list[i].layout.right);
+              }
+              
+              for (let i = 0; i &lt; output_stream_list.length; ++i) 
+              {
+                  zego_base_.addMixStreamOutputTarget(output_stream_list[i].is_url, output_stream_list[i].target);
+              }
+              
+              return zego_base_.startMixStream(mix_stream_id);
+          }catch(err)
+          {
+              console.log("mixStreamEx error:",err);
+          }
+
+      }
+      
+  }
+  
+  
+  
+  /**
+   * 拍照录制结果回调
+   * @callback onSnapshotRecord
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0-成功，-1-失败，可能没有权限写入文件，写入文件失败
+   */
+  
+  /**
+   * 初始化sdk回调
+   * @callback onInitSDK
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码,0-成功，其它值，查看&lt;a href="https://www.zego.im/html/document/#Audio_Room/Error_Code" target="_blank">官网错误码列表&lt;/a>
+   */
+  
+  /**
+   * 登陆房间返回
+   * @callback onLoginRoom
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0-成功，其它值，查看&lt;a href="https://www.zego.im/html/document/#Audio_Room/Error_Code" target="_blank">官网错误码列表&lt;/a>
+   * @param {string} result.room_id - 房间id
+   * @param {number} result.stream_count - 房间媒体流的数量
+   * @param {string} result.stream_list - 流信息对象数组，流信息对象属性如下：
+   * @param {string} result.stream_list.stream_id - 流id
+   * @param {string} result.stream_list.user_name - 用户名
+   * @param {string} result.stream_list.user_id - 用户id
+   * @param {string} result.stream_list.extra_info - 流额外信息
+   */
+  
+  /**
+   * 登出房间返回
+   * @callback onLogoutRoom
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码,0-成功
+   * @param {string} result.room_id - 房间id
+   */
+  
+  
+  /**
+   * SDK 引擎事件通知
+   * @callback onAVKitEvent
+   * @param {object} result - 结果数据对象
+   * @param {number} result.event_code - 事件码，1-开始重试拉流，2-重试拉流成功，3-开始重试推流，4-重试推流成功，5-拉流临时中断，6-推流临时中断，7-拉流卡顿(视频)。
+   * @param {object|array} result.event_info - 事件信息对象数组，事件信息对象属性如下：
+   * @param {string} result.event_info.event_key - 事件名称
+   * @param {string} result.event_info.event_value - 事件值
+   */
+  
+  /**
+   * 拉流状态通知
+   * @callback onPlayStateUpdate
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0-成功，其它值查看官网&lt;a href="https://www.zego.im/html/document/#Audio_Room/Error_Code" target="_blank">3 onPlayStateUpdate的错误码说明&lt;/a>
+   * @param {string} result.stream_id - 流id
+   */
+  
+  /**
+   * 拉流质量更新事件通知
+   * @callback onPlayQualityUpdate
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 事件码
+   * @param {string} result.stream_id - 流id
+   * @param {number} result.fps - 视频帧率(网络接收)
+   * @param {number} result.vdj_fps - 视频帧率(dejitter)
+   * @param {number} result.vdec_fps - 视频帧率(解码)
+   * @param {number} result.vrnd_fps - 视频帧率(渲染)
+   * @param {number} result.kbps - 视频码率(kb/s)
+   * @param {number} result.afps - 音频帧率(网络接收)
+   * @param {number} result.adj_fps - 音频帧率(dejitter)
+   * @param {number} result.adec_fps - 音频帧率(解码)
+   * @param {number} result.arnd_fps - 音频帧率(渲染)
+   * @param {number} result.akbps - 音频码率(kb/s)
+   * @param {number} result.audio_break_rate - 音频卡顿次数
+   * @param {number} result.video_break_rate - 视频卡顿次数
+   * @param {number} result.rtt - 延时(ms)
+   * @param {number} result.pkt_lost_rate - 丢包率(0~255)
+   * @param {number} result.quality - 质量(0~3)
+   * @param {number} result.delay - 语音延时(ms)
+   * @param {number} result.is_hardware_vdec - 是否硬解
+   * @param {number} result.width - 视频宽度
+   * @param {number} result.height - 视频高度
+   */
+  
+  /**
+   * 推流状态更新
+   * @callback onPublishStateUpdate
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0-成功，其它值查看官网&lt;a href="https://www.zego.im/html/document/#Audio_Room/Error_Code" target="_blank">2 onPublishStateUpdate的错误码说明&lt;/a>
+   * @param {string} result.stream_id - 流id
+   * @param {string|array} result.rtmp_urls - rtmp url数组
+   * @param {string|array} result.flv_urls - flv url 数组
+   * @param {string|array} result.hls_urls - hls url 数组
+   */
+  
+  /**
+   * 推流质量通知
+   * @callback onPublishQualityUpdate
+   * @param {object} result - 结果数据对象
+   * @param {string} result.stream_id - 流id
+   * @param {number} result.cfps - 视频帧率(采集)
+   * @param {number} result.venc_fps - 视频帧率(编码)
+   * @param {number} result.fps - 视频帧率(网络发送)
+   * @param {number} result.kbps - 视频码率(kb/s)
+   * @param {number} result.acap_fps - 音频帧率（采集）
+   * @param {number} result.afps - 音频帧率（网络发送）
+   * @param {number} result.akbps - 音频码率(kb/s)
+   * @param {number} result.rtt - 延时(ms)
+   * @param {number} result.pkt_lost_rate - 丢包率(0~255)
+   * @param {number} result.quality - 质量(0~3)
+   * @param {number} result.is_hardware_venc - 是否硬编
+   * @param {number} result.width - 视频宽度
+   * @param {number} result.height - 视频高度
+   */
+  
+  
+  /**
+   * 流更新事件通知，房间内增加流、删除流，均会触发此更新。主播推流，自己不会收到此回调，房间内其他成员会收到。建议对流增加和流删除分别采取不同的处理。
+   * @callback onStreamUpdated
+   * @param {object} result - 结果数据对象
+   * @param {string} result.room_id - 房间id
+   * @param {number} result.stream_update_type - 2001-新增流，2002-删除流
+   * @param {number} result.stream_count - 流数量
+   * @param {object|array} result.stream_list - 流信息对象数组，流信息对象属性如下：
+   * @param {string} result.stream_list.user_id - 用户id
+   * @param {string} result.stream_list.user_name - 用户名字
+   * @param {string} result.stream_list.stream_id - 流id
+   * @param {string} result.stream_list.extra_info - 流额外信息
+   */
+  
+  /**
+   * 房间用户信息更新
+   * @callback onUserUpdate
+   * @param {object} result - 结果数据对象
+   * @param {number} result.update_type - 更新类型，1-全量更新，2-增量更新
+   * @param {object|array} result.users - 用户信息对象数组，用户信息对象属性如下：
+   * @param {string} result.users.user_id - 用户id
+   * @param {string} result.users.user_name - 用户名字
+   * @param {number} result.users.update_flag - 更新属性，1-新增，2-删除
+   * @param {number} result.users.role - 成员角色，1-主播，2-观众
+   */
+  
+  /**
+   * 房间在线人数更新
+   * @callback onUpdateOnlineCount
+   * @param {object} result - 结果数据对象
+   * @param {string} result.room_id - 房间id
+   * @param {number} result.online_count - 在线人数
+   */
+  
+  /**
+   * 发送房间消息结果返回
+   * @callback onSendRoomMessage
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码
+   * @param {string} result.room_id - 房间id
+   * @param {number} result.send_seq - 发送的消息序号
+   * @param {number} result.msg_id - 消息id
+   */
+  
+  /**
+   * 收到房间消息通知
+   * @callback onRecvRoomMessage
+   * @param {object} result - 结果数据对象
+   * @param {string} result.room_id - 房间id
+   * @param {object|array} result.msg_list - 消息信息对象数组，消息信息对象属性如下：
+   * @param {string} result.msg_list.user_id - 用户id
+   * @param {string} result.msg_list.user_name - 用户名字
+   * @param {number} result.msg_list.role - 成员角色，1-主播，2-观众
+   * @param {string} result.msg_list.content - 消息内容
+   * @param {string} result.msg_list.msg_id - 消息id
+   * @param {string} result.msg_list.msg_type - 消息类型
+   * @param {number} result.msg_list.msg_priority - 消息优先级，2-默认优先级，3-高优先级
+   * @param {number} result.msg_list.msg_category - 消息类别，1-聊天，2-系统，3-点赞，4-送礼物，100-其它
+   * @param {number} result.msg_list.send_time - 消息发送时间
+   *
+   */
+  
+  /**
+   * 发送大房间消息结果返回
+   * @callback onSendBigRoomMessage
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码
+   * @param {string} result.room_id - 房间id
+   * @param {number} result.send_seq - 消息序号
+   * @param {string} result.msg_id - 消息id
+   */
+  
+  /**
+   * 收到大房间消息通知
+   * @callback onRecvBigRoomMessage
+   * @param {object} result - 结果数据对象
+   * @param {string} result.room_id - 房间id
+   * @param {object|array} result.msg_list - 消息信息对象数组，消息信息对象属性如下：
+   * @param {string} result.msg_list.user_id - 用户id
+   * @param {string} result.msg_list.user_name - 用户名字
+   * @param {number} result.msg_list.role - 成员角色，1-主播，2-观众
+   * @param {string} result.msg_list.content - 消息内容
+   * @param {string} result.msg_list.msg_id - 消息id
+   * @param {string} result.msg_list.msg_type - 消息类型
+   * @param {number} result.msg_list.msg_category - 消息类别，1-聊天，2-系统，3-点赞，4-送礼物，100-其它
+   * @param {number} result.msg_list.send_time - 消息发送时间
+   *
+   */
+  
+  /**
+   * 发送自定义消息结果返回
+   * @callback onCustomCommand
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码
+   * @param {string} result.room_id - 字符串
+   * @param {number} result.request_seq - 序号
+   */
+  
+  /**
+   * 收到自定义消息
+   * @callback onRecvCustomCommand
+   * @param {object} result - 结果数据对象
+   * @param {string} result.user_id - 消息来源用户id
+   * @param {string} result.user_name - 消息来源用户名字
+   * @param {string} result.room_id - 房间id
+   * @param {string} result.content - 消息内容
+   */
+  
+  /**
+   * 流附加信息更新
+   * @callback onStreamExtraInfoUpdated
+   * @param {object} result - 结果数据对象
+   * @param {string} result.room_id - 房间id
+   * @param {number} result.stream_count - 流数量
+   * @param {object | array} result.stream_list - 流信息对象数组，流信息对象属性如下：
+   * @param {string} result.stream_list.user_id - 用户id
+   * @param {string} result.stream_list.user_name - 用户名字
+   * @param {string} result.stream_list.stream_id - 流id
+   * @param {string} result.stream_list.extra_info - extra_info信息
+   *
+   */
+  
+  /**
+   * 音频设备状态更新通知
+   * @callback onAudioDeviceStateChanged
+   * @param {object} result - 结果数据对象
+   * @param {number} result.device_type - 0-输入设备，1-输出设备
+   * @param {number} result.device_state - 0-添加设备，1-删除设备
+   * @param {string} result.device_id - 设备id
+   * @param {string} result.device_name - 设备名字
+   */
+  
+  /**
+   * 视频设备状态更新通知
+   * @callback onVideoDeviceStateChanged
+   * @param {object} result - 结果数据对象
+   * @param {number} result.device_state - 0-添加设备，1-删除设备
+   * @param {string} result.device_id - 设备id
+   * @param {string} result.device_name - 设备名字
+   */
+  
+  /**
+   * 音量变更事件通知
+   * @callback onAudioVolumeChanged
+   * @param {object} result - 结果数据对象
+   * @param {number} result.device_type - 0-输入设备，1-输出设备
+   * @param {string} result.device_id - 设备id
+   * @param {number} result.volume_type - 音量类型，0-设备音量，1-App音量
+   * @param {number} result.volume - 音量值
+   * @param {boolean} result.is_mute - 是否静音，true-静音，false-非静音
+   *
+   */
+  
+  /**
+   * 设备状态错误事件通知，
+   * @callback onDeviceError
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码
+   * @param {string} result.device_name - 设备名字
+   */
+  
+  /**
+   * 被踢掉线通知，可在该回调中处理用户被踢出房间后的下一步处理（例如报错、重新登录提示等）
+   * @callback onKickOut
+   * @param {object} result - 结果数据对象
+   * @param {number} result.reason - 被踢出原因，16777219 表示该账户多点登录被踢出，16777220 表示房间关闭被踢出，16777221 表示房间会话错误被踢出，16777222 表示推送通道被踢出。
+   * @param {string} result.room_id - 房间id
+   */
+  
+  /**
+   * 已从房间断开连接的通知，建议开发者在此通知中进行重新登录、推/拉流、报错、友好性提示等其他恢复逻辑。与 server 断开连接后，SDK 会进行重试，重试失败抛出此错误。请注意，此时 SDK 与服务器的所有连接均会断开。
+   * @callback onDisconnect
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0 表示无错误
+   * @param {string} result.room_id - 房间id
+   */
+  
+  /**
+   * 与 server 重连成功通知
+   * @callback onReconnect
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0 表示无错误
+   * @param {string} result.room_id - 房间id
+   */
+  
+  /**
+   * 与 server 连接中断通知，SDK会尝试自动重连
+   * @callback onTempBroken
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 错误码，0 表示无错误
+   * @param {string} result.room_id - 房间id
+   */
+  
+  /**
+   * 音视频引擎停止时回调
+   * @callback onAVEngineStop
+   */
+  
+  /**
+   * 收到媒体次要信息时回调
+   * @callback onRecvMediaSideInfo
+   * @param {object} result - 结果数据对象
+   * @param {string} result.stream_id - 流id
+   * @param {string} result.side_info - 媒体次要信息内容
+   */
+
+  /**
+   * 混流回调接口
+   * @callback onMixStreamEx
+   * @param {object} result - 结果数据对象
+   * @param {number} result.error_code - 混流结果 ， 0 - 成功
+   * @param {number} result.seq - 请求 seq，与mixStreamEx返回的结果一致，关联标识是哪次发起的混流任务的回调
+   * @param {string} result.mix_stream_id - 混流任务id，标识唯一混流任务
+   * @param {object|array} result.non_exists_stream_list - 不存在的输入流信息对象数组列表，流信息对象属性如下：
+   * @param {string} result.non_exists_stream_list.stream_id - 不存在的流的流id 
+   * @param {object|array} result.output_stream_info_list - 混流输出对象数组列表，输出对象属性如下：
+   * @param {string} result.output_stream_info_list.stream_id - 混流的流id
+   * @param {string} result.output_stream_info_list.mix_stream_id - 混流任务id，标识一个混流任务
+   * @param {string|array} result.output_stream_info_list.rtmp_url_list - RTMP 播放 URL 数组列表
+   * @param {string|array} result.output_stream_info_list.flv_url_list - flv 播放 URL 数组列表
+   * @param {string|array} result.output_stream_info_list.hls_url_list - hls 播放 URL 数组列表
+   * 
+   */
+
+  /**
+   * 混流中，音浪回调通知，显示发言者及音量大小的回调。每秒钟10次通知，不拉流没有通知
+   * @callback onSoundLevelInMixedPlayStream
+   * @param {object} result - 结果数据对象
+   * @param {objct|array} result.volume_list - 音量数组对象列表，音量对象属性如下：
+   * @param {number} result.volume_list.sound_level_id - 音浪id，对应混流输入流的音浪id
+   * @param {number} result.volume_list.sound_level - 音浪值，标识音量的大小
+   * 
+   */
+  
+
+  
+  module.exports = exports = ZegoLiveRoom
+  </code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#activateAudioPlayStream">activateAudioPlayStream</a></li><li><a href="global.html#activateMediaSideInfo">activateMediaSideInfo</a></li><li><a href="global.html#activateVideoPlayStream">activateVideoPlayStream</a></li><li><a href="global.html#addRecordSource">addRecordSource</a></li><li><a href="global.html#enableAEC">enableAEC</a></li><li><a href="global.html#enableAGC">enableAGC</a></li><li><a href="global.html#enableANS">enableANS</a></li><li><a href="global.html#enableCamera">enableCamera</a></li><li><a href="global.html#enableCaptureMirror">enableCaptureMirror</a></li><li><a href="global.html#enableCaptureStereo">enableCaptureStereo</a></li><li><a href="global.html#enableCheckPoc">enableCheckPoc</a></li><li><a href="global.html#enableDTX">enableDTX</a></li><li><a href="global.html#enableLoopback">enableLoopback</a></li><li><a href="global.html#enableMic">enableMic</a></li><li><a href="global.html#enableMixSystemPlayout">enableMixSystemPlayout</a></li><li><a href="global.html#enableSpeaker">enableSpeaker</a></li><li><a href="global.html#enableTrafficControl">enableTrafficControl</a></li><li><a href="global.html#enableVAD">enableVAD</a></li><li><a href="global.html#getAudioDeviceList">getAudioDeviceList</a></li><li><a href="global.html#getCaptureSoundLevel">getCaptureSoundLevel</a></li><li><a href="global.html#getDefaultAudioDeviceId">getDefaultAudioDeviceId</a></li><li><a href="global.html#getDefaultVideoDeviceId">getDefaultVideoDeviceId</a></li><li><a href="global.html#getEngineVersion">getEngineVersion</a></li><li><a href="global.html#getMaxPlayChannelCount">getMaxPlayChannelCount</a></li><li><a href="global.html#getMicDeviceMute">getMicDeviceMute</a></li><li><a href="global.html#getMicDeviceVolume">getMicDeviceVolume</a></li><li><a href="global.html#getSDKVersion">getSDKVersion</a></li><li><a href="global.html#getSpeakerDeviceMute">getSpeakerDeviceMute</a></li><li><a href="global.html#getSpeakerDeviceVolume">getSpeakerDeviceVolume</a></li><li><a href="global.html#getSpeakerSimpleMute">getSpeakerSimpleMute</a></li><li><a href="global.html#getSpeakerSimpleVolume">getSpeakerSimpleVolume</a></li><li><a href="global.html#getVideoDeviceList">getVideoDeviceList</a></li><li><a href="global.html#initFontPath">initFontPath</a></li><li><a href="global.html#initSDK">initSDK</a></li><li><a href="global.html#loginRoom">loginRoom</a></li><li><a href="global.html#logoutRoom">logoutRoom</a></li><li><a href="global.html#mediaPlayerEnableRepeatMode">mediaPlayerEnableRepeatMode</a></li><li><a href="global.html#mediaPlayerGetAudioStreamCount">mediaPlayerGetAudioStreamCount</a></li><li><a href="global.html#mediaPlayerGetCurrentDuration">mediaPlayerGetCurrentDuration</a></li><li><a href="global.html#mediaPlayerGetDuration">mediaPlayerGetDuration</a></li><li><a href="global.html#mediaPlayerInitWithType">mediaPlayerInitWithType</a></li><li><a href="global.html#mediaPlayerLoad">mediaPlayerLoad</a></li><li><a href="global.html#mediaPlayerMuteLocal">mediaPlayerMuteLocal</a></li><li><a href="global.html#mediaPlayerPause">mediaPlayerPause</a></li><li><a href="global.html#mediaPlayerResume">mediaPlayerResume</a></li><li><a href="global.html#mediaPlayerSeekTo">mediaPlayerSeekTo</a></li><li><a href="global.html#mediaPlayerSetAudioStream">mediaPlayerSetAudioStream</a></li><li><a href="global.html#mediaPlayerSetPlayerType">mediaPlayerSetPlayerType</a></li><li><a href="global.html#mediaPlayerSetView">mediaPlayerSetView</a></li><li><a href="global.html#mediaPlayerSetVolume">mediaPlayerSetVolume</a></li><li><a href="global.html#mediaPlayerStart">mediaPlayerStart</a></li><li><a href="global.html#mediaPlayerStop">mediaPlayerStop</a></li><li><a href="global.html#mixStreamEx">mixStreamEx</a></li><li><a href="global.html#onEventHandler">onEventHandler</a></li><li><a href="global.html#playAudioFile">playAudioFile</a></li><li><a href="global.html#requireHardwareDecoder">requireHardwareDecoder</a></li><li><a href="global.html#requireHardwareEncoder">requireHardwareEncoder</a></li><li><a href="global.html#sendBigRoomMessage">sendBigRoomMessage</a></li><li><a href="global.html#sendCustomCommand">sendCustomCommand</a></li><li><a href="global.html#sendMediaSideInfo">sendMediaSideInfo</a></li><li><a href="global.html#sendRoomMessage">sendRoomMessage</a></li><li><a href="global.html#setAudioBitrate">setAudioBitrate</a></li><li><a href="global.html#setAudioChannelCount">setAudioChannelCount</a></li><li><a href="global.html#setAudioDevice">setAudioDevice</a></li><li><a href="global.html#setAudioDeviceMode">setAudioDeviceMode</a></li><li><a href="global.html#setAudioVolumeNotify">setAudioVolumeNotify</a></li><li><a href="global.html#setCustomPublishTarget">setCustomPublishTarget</a></li><li><a href="global.html#setGeneralConfig">setGeneralConfig</a></li><li><a href="global.html#setLatencyMode">setLatencyMode</a></li><li><a href="global.html#setLogDir">setLogDir</a></li><li><a href="global.html#setLogSize">setLogSize</a></li><li><a href="global.html#setLoopbackVolume">setLoopbackVolume</a></li><li><a href="global.html#setMicDeviceMute">setMicDeviceMute</a></li><li><a href="global.html#setMicDeviceVolume">setMicDeviceVolume</a></li><li><a href="global.html#setPlayQualityMonitorCycle">setPlayQualityMonitorCycle</a></li><li><a href="global.html#setPlayVolume">setPlayVolume</a></li><li><a href="global.html#setPreviewView">setPreviewView</a></li><li><a href="global.html#setPreviewViewMode">setPreviewViewMode</a></li><li><a href="global.html#setPublishStreamExtraInfo">setPublishStreamExtraInfo</a></li><li><a href="global.html#setRecordOutput">setRecordOutput</a></li><li><a href="global.html#setSpeakerDeviceMute">setSpeakerDeviceMute</a></li><li><a href="global.html#setSpeakerDeviceVolume">setSpeakerDeviceVolume</a></li><li><a href="global.html#setSpeakerSimpleMute">setSpeakerSimpleMute</a></li><li><a href="global.html#setSpeakerSimpleVolume">setSpeakerSimpleVolume</a></li><li><a href="global.html#setUseEnv">setUseEnv</a></li><li><a href="global.html#setVerbose">setVerbose</a></li><li><a href="global.html#setVideoBitrate">setVideoBitrate</a></li><li><a href="global.html#setVideoCaptureResolution">setVideoCaptureResolution</a></li><li><a href="global.html#setVideoCodecId">setVideoCodecId</a></li><li><a href="global.html#setVideoDevice">setVideoDevice</a></li><li><a href="global.html#setVideoEncodeResolution">setVideoEncodeResolution</a></li><li><a href="global.html#setVideoFPS">setVideoFPS</a></li><li><a href="global.html#setViewMode">setViewMode</a></li><li><a href="global.html#showRecordTimestamp">showRecordTimestamp</a></li><li><a href="global.html#snapshotRecord">snapshotRecord</a></li><li><a href="global.html#snapshotVideo">snapshotVideo</a></li><li><a href="global.html#startPlayingStream">startPlayingStream</a></li><li><a href="global.html#startPreview">startPreview</a></li><li><a href="global.html#startPublishing">startPublishing</a></li><li><a href="global.html#startRecord">startRecord</a></li><li><a href="global.html#stopAudioVolumeNotify">stopAudioVolumeNotify</a></li><li><a href="global.html#stopPlayingStream">stopPlayingStream</a></li><li><a href="global.html#stopPreview">stopPreview</a></li><li><a href="global.html#stopPublishing">stopPublishing</a></li><li><a href="global.html#stopRecord">stopRecord</a></li><li><a href="global.html#unInitSDK">unInitSDK</a></li><li><a href="global.html#updatePPTPath">updatePPTPath</a></li><li><a href="global.html#updateRecordImagePath">updateRecordImagePath</a></li><li><a href="global.html#uploadLog">uploadLog</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Fri May 10 2019 16:35:29 GMT+0800 (GMT+08:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
